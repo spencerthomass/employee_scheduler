@@ -50,14 +50,16 @@ def get_roster_state(start_date_str: str, request: Request):
 
     # Calculate dates
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-    week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+    
+    # CHANGED: range(6) excludes Sunday (Mon-Sat)
+    week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
         employees = session.exec(select(Employee).where(Employee.active == True)).all()
         locations = session.exec(select(Location)).all()
         shifts = session.exec(select(Shift).where(
             Shift.date_str >= week_dates[0],
-            Shift.date_str <= week_dates[6]
+            Shift.date_str <= week_dates[-1] # Use the last day of our 6-day range
         )).all()
 
         grid = {e.id: {d: None for d in week_dates} for e in employees}
@@ -79,7 +81,6 @@ def get_roster_state(start_date_str: str, request: Request):
 @app.post("/api/login")
 def login(req: LoginRequest, response: Response):
     if req.password == ADMIN_PASSWORD:
-        # Set a simple cookie
         response.set_cookie(key="admin_token", value=SECRET_KEY, httponly=True)
         return {"status": "ok"}
     raise HTTPException(status_code=401, detail="Incorrect password")
@@ -116,8 +117,9 @@ def remove_shift(req: DeleteRequest):
         session.commit()
     return {"status": "ok"}
 
-# --- Management Routes (Add/Delete Staff & Shops) ---
+# --- Management Routes (Add/Update/Delete) ---
 
+# EMPLOYEES
 @app.post("/api/employees", dependencies=[Depends(get_current_admin)])
 def add_employee(req: NameRequest):
     with Session(engine) as session:
@@ -125,19 +127,41 @@ def add_employee(req: NameRequest):
         session.commit()
     return {"status": "ok"}
 
+@app.put("/api/employees/{id}", dependencies=[Depends(get_current_admin)])
+def update_employee(id: int, req: NameRequest):
+    with Session(engine) as session:
+        emp = session.get(Employee, id)
+        if not emp:
+            raise HTTPException(status_code=404, detail="Not found")
+        emp.name = req.name
+        session.add(emp)
+        session.commit()
+    return {"status": "ok"}
+
 @app.delete("/api/employees/{id}", dependencies=[Depends(get_current_admin)])
 def delete_employee(id: int):
     with Session(engine) as session:
-        # Cascade delete shifts first
         session.exec(delete(Shift).where(Shift.employee_id == id))
         session.exec(delete(Employee).where(Employee.id == id))
         session.commit()
     return {"status": "ok"}
 
+# LOCATIONS
 @app.post("/api/locations", dependencies=[Depends(get_current_admin)])
 def add_location(req: NameRequest):
     with Session(engine) as session:
         session.add(Location(name=req.name))
+        session.commit()
+    return {"status": "ok"}
+
+@app.put("/api/locations/{id}", dependencies=[Depends(get_current_admin)])
+def update_location(id: int, req: NameRequest):
+    with Session(engine) as session:
+        loc = session.get(Location, id)
+        if not loc:
+            raise HTTPException(status_code=404, detail="Not found")
+        loc.name = req.name
+        session.add(loc)
         session.commit()
     return {"status": "ok"}
 
