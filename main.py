@@ -27,7 +27,7 @@ class LoginRequest(BaseModel): password: str
 class MoveRequest(BaseModel): employee_id: int; date_str: str; location_id: int
 class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
-class ConstraintRequest(BaseModel): employee_id: int; target_id: int # target can be loc_id or emp_id
+class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
 
 # --- Public Routes ---
 
@@ -35,19 +35,20 @@ class ConstraintRequest(BaseModel): employee_id: int; target_id: int # target ca
 def get_roster_state(start_date_str: str, request: Request):
     is_admin = request.cookies.get("admin_token") == SECRET_KEY
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    # Mon-Sat (6 days)
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
-        employees = session.exec(select(Employee).where(Employee.active == True)).all()
-        locations = session.exec(select(Location)).all()
+        # CHANGED: Added .order_by(Employee.name)
+        employees = session.exec(select(Employee).where(Employee.active == True).order_by(Employee.name)).all()
+        # CHANGED: Added .order_by(Location.name)
+        locations = session.exec(select(Location).order_by(Location.name)).all()
+        
         shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
         
-        # Fetch Constraints
         loc_constraints = session.exec(select(LocationConstraint)).all()
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
 
-        # Build Constraint Map for Frontend
-        # Structure: constraints[emp_id] = { bad_locs: [ids], bad_coworkers: [ids] }
         constraints = {e.id: {"bad_locs": [], "bad_coworkers": []} for e in employees}
         
         for lc in loc_constraints:
@@ -55,13 +56,11 @@ def get_roster_state(start_date_str: str, request: Request):
                 constraints[lc.employee_id]["bad_locs"].append(lc.location_id)
         
         for ec in emp_constraints:
-            # Add bi-directional conflicts for easier frontend logic
             if ec.employee_id in constraints:
                 constraints[ec.employee_id]["bad_coworkers"].append(ec.target_employee_id)
             if ec.target_employee_id in constraints:
                 constraints[ec.target_employee_id]["bad_coworkers"].append(ec.employee_id)
 
-        # Build Grid
         grid = {e.id: {d: None for d in week_dates} for e in employees}
         loc_map = {l.id: l for l in locations}
         for shift in shifts:
@@ -168,7 +167,6 @@ def delete_location(id: int):
 @app.post("/api/constraints/location", dependencies=[Depends(get_current_admin)])
 def add_loc_constraint(req: ConstraintRequest):
     with Session(engine) as session:
-        # Check duplicate
         exists = session.exec(select(LocationConstraint).where(LocationConstraint.employee_id==req.employee_id, LocationConstraint.location_id==req.target_id)).first()
         if not exists:
             session.add(LocationConstraint(employee_id=req.employee_id, location_id=req.target_id))
@@ -185,7 +183,6 @@ def remove_loc_constraint(req: ConstraintRequest):
 @app.post("/api/constraints/employee", dependencies=[Depends(get_current_admin)])
 def add_emp_constraint(req: ConstraintRequest):
     with Session(engine) as session:
-        # Prevent A->A or duplicates
         if req.employee_id == req.target_id: return {"status": "error"}
         exists = session.exec(select(EmployeeConstraint).where(EmployeeConstraint.employee_id==req.employee_id, EmployeeConstraint.target_employee_id==req.target_id)).first()
         if not exists:
@@ -196,7 +193,6 @@ def add_emp_constraint(req: ConstraintRequest):
 @app.delete("/api/constraints/employee", dependencies=[Depends(get_current_admin)])
 def remove_emp_constraint(req: ConstraintRequest):
     with Session(engine) as session:
-        # We try to delete both directions just in case, to keep it clean
         session.exec(delete(EmployeeConstraint).where(EmployeeConstraint.employee_id==req.employee_id, EmployeeConstraint.target_employee_id==req.target_id))
         session.exec(delete(EmployeeConstraint).where(EmployeeConstraint.employee_id==req.target_id, EmployeeConstraint.target_employee_id==req.employee_id))
         session.commit()
