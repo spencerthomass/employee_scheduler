@@ -13,7 +13,7 @@
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
         
-        /* Ensure columns align perfectly between the two tables */
+        /* Column Widths */
         .col-name { width: 200px; min-width: 200px; }
         .col-day { width: 120px; min-width: 120px; }
         .col-total { width: 80px; min-width: 80px; }
@@ -58,9 +58,7 @@
                         <input type="checkbox" v-model="showCoverage" class="form-checkbox h-4 w-4 text-indigo-600">
                         <span class="text-gray-600 font-bold text-xs">Show Shop Counts</span>
                     </label>
-
                     <div class="h-6 w-px bg-gray-300"></div>
-
                     <button v-if="!isAdmin" @click="showModal('login')" class="text-indigo-600 hover:underline font-bold px-3">Admin Login</button>
                     <button v-else @click="logout" class="text-red-600 hover:underline px-3">Logout</button>
                 </div>
@@ -69,7 +67,7 @@
             <div class="flex-1 overflow-auto bg-gray-50 flex flex-col">
                 
                 <div v-if="showCoverage" class="bg-white border-b-4 border-gray-200 p-4 shadow-sm shrink-0">
-                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Shop Coverage (Headcount)</h2>
+                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Shop Coverage (Mon-Sat)</h2>
                     <table class="w-full border-collapse text-xs">
                         <thead>
                             <tr>
@@ -135,11 +133,13 @@
             </div>
 
             <div v-if="modalMode" class="modal-mask" @click.self="modalMode = null">
+                
                 <div v-if="modalMode === 'login'" class="bg-white p-6 rounded shadow-lg w-80">
                     <h3 class="text-lg font-bold mb-4">Admin Access</h3>
                     <input type="password" v-model="passwordInput" placeholder="Password" class="w-full border p-2 rounded mb-4" @keyup.enter="login">
                     <button @click="login" class="w-full bg-indigo-600 text-white py-2 rounded font-bold">Login</button>
                 </div>
+                
                 <div v-if="modalMode === 'staff'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
                     <h3 class="text-lg font-bold mb-4">Manage Employees</h3>
                     <div class="flex mb-4">
@@ -148,12 +148,16 @@
                     </div>
                     <div class="flex-1 overflow-y-auto border-t pt-2">
                         <div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b">
-                            <span>{{ emp.name }}</span>
-                            <button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 font-bold text-sm">Delete</button>
+                            <span class="font-bold text-gray-700">{{ emp.name }}</span>
+                            <div class="flex items-center space-x-2">
+                                <button @click="updateItem('employees', emp.id, emp.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
+                                <button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button>
+                            </div>
                         </div>
                     </div>
                     <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
+                
                 <div v-if="modalMode === 'shops'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
                     <h3 class="text-lg font-bold mb-4">Manage Shops</h3>
                     <div class="flex mb-4">
@@ -162,12 +166,16 @@
                     </div>
                     <div class="flex-1 overflow-y-auto border-t pt-2">
                         <div v-for="loc in locations" :key="loc.id" class="flex justify-between items-center py-2 border-b">
-                            <span>{{ loc.name }}</span>
-                            <button @click="deleteItem('locations', loc.id)" class="text-red-500 hover:text-red-700 font-bold text-sm">Delete</button>
+                            <span class="font-bold text-gray-700">{{ loc.name }}</span>
+                            <div class="flex items-center space-x-2">
+                                <button @click="updateItem('locations', loc.id, loc.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
+                                <button @click="deleteItem('locations', loc.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button>
+                            </div>
                         </div>
                     </div>
                     <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
+
             </div>
         </div>
     </div>
@@ -189,7 +197,7 @@
                 const weekDates = ref([]);
                 const grid = ref({});
                 const isAdmin = ref(false);
-                const showCoverage = ref(true); // Default to showing the coverage matrix
+                const showCoverage = ref(true); 
                 
                 const modalMode = ref(null);
                 const passwordInput = ref("");
@@ -232,6 +240,7 @@
                     fetchData();
                 };
 
+                // --- CRUD Logic ---
                 const createItem = async (type) => {
                     if(!newItemName.value) return;
                     await fetch(`/api/${type}`, {
@@ -240,6 +249,19 @@
                         body: JSON.stringify({ name: newItemName.value })
                     });
                     newItemName.value = "";
+                    fetchData();
+                };
+
+                // NEW: Update Item Logic
+                const updateItem = async (type, id, oldName) => {
+                    const newName = prompt("Rename:", oldName);
+                    if (!newName || newName === oldName) return;
+
+                    await fetch(`/api/${type}/${id}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ name: newName })
+                    });
                     fetchData();
                 };
 
@@ -260,7 +282,7 @@
                     if (!locId) return;
 
                     const loc = locations.value.find(l => l.id == locId);
-                    grid.value[empId][dateStr] = loc; // Optimistic update
+                    grid.value[empId][dateStr] = loc;
 
                     await fetch('/api/assign', {
                         method: 'POST',
@@ -278,15 +300,11 @@
                     });
                 };
 
-                // --- Coverage Logic ---
                 const getShopCount = (locId, date) => {
                     let count = 0;
-                    // Loop through all employees to calculate totals for this specific day/shop
                     for (const empId in grid.value) {
                         const shift = grid.value[empId][date];
-                        if (shift && shift.id === locId) {
-                            count++;
-                        }
+                        if (shift && shift.id === locId) count++;
                     }
                     return count;
                 };
@@ -304,7 +322,7 @@
                 return { 
                     currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage,
                     modalMode, passwordInput, newItemName, showModal,
-                    fetchData, changeWeek, login, logout, createItem, deleteItem,
+                    fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem,
                     onDragStart, onDrop, removeShift, getShopCount,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
                 };
