@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emissions Plus Employee Schedule</title>
+    <title>Employee Roster</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -12,8 +12,6 @@
         tr.emp-row { height: 50px; }
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
-        
-        /* Column Widths */
         .col-name { width: 200px; min-width: 200px; }
         .col-day { width: 120px; min-width: 120px; }
         .col-total { width: 80px; min-width: 80px; }
@@ -27,7 +25,6 @@
                 Admin Tools
                 <div class="text-xs font-normal text-gray-400 mt-1">Drag shops to grid</div>
             </div>
-            
             <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
                 <div v-for="loc in locations" :key="loc.id" 
                      draggable="true" @dragstart="onDragStart($event, loc.id)"
@@ -35,7 +32,6 @@
                     <div class="font-bold text-gray-700">{{ loc.name }}</div>
                 </div>
             </div>
-
             <div class="p-3 bg-gray-100 border-t space-y-2">
                 <button @click="showModal('staff')" class="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow">Manage Staff</button>
                 <button @click="showModal('shops')" class="w-full py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow">Manage Shops</button>
@@ -43,22 +39,12 @@
         </div>
 
         <div class="flex-1 flex flex-col min-w-0">
-            
-            <div class="bg-white border-b p-2 flex justify-between items-center shadow-sm z-10">
-                
-                <div class="flex items-center">
-                    <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" 
-                         alt="Emissions Plus Logo" class="h-12 mr-4">
-                    
-                    <div class="flex items-center space-x-4 border-l pl-4 py-1">
-                        <button @click="changeWeek(-7)" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded border font-bold text-gray-600">&lt;</button>
-                        <div class="text-center">
-                            <div class="font-bold text-lg text-gray-800">Week of {{ formatDateReadable(weekDates[0]) }}</div>
-                        </div>
-                        <button @click="changeWeek(7)" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded border font-bold text-gray-600">&gt;</button>
-                    </div>
+            <div class="bg-white border-b p-3 flex justify-between items-center shadow-sm z-10">
+                <div class="flex items-center space-x-4">
+                    <button @click="changeWeek(-7)" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded border font-bold text-gray-600">&lt;</button>
+                    <div class="text-center"><div class="font-bold text-lg text-gray-800">Week of {{ formatDateReadable(weekDates[0]) }}</div></div>
+                    <button @click="changeWeek(7)" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded border font-bold text-gray-600">&gt;</button>
                 </div>
-                
                 <div class="flex items-center space-x-4">
                     <label class="flex items-center space-x-2 cursor-pointer select-none">
                         <input type="checkbox" v-model="showCoverage" class="form-checkbox h-4 w-4 text-indigo-600">
@@ -71,9 +57,8 @@
             </div>
 
             <div class="flex-1 overflow-auto bg-gray-50 flex flex-col">
-                
                 <div v-if="showCoverage" class="bg-white border-b-4 border-gray-200 p-4 shadow-sm shrink-0">
-                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Shop Coverage (Mon-Sat)</h2>
+                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Shop Coverage</h2>
                     <table class="w-full border-collapse text-xs">
                         <thead>
                             <tr>
@@ -113,9 +98,7 @@
                             <tr v-for="emp in employees" :key="emp.id" class="emp-row hover:bg-gray-50 transition-colors">
                                 <td class="col-name p-3 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
                                     <div class="flex items-center">
-                                        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2">
-                                            {{ getInitials(emp.name) }}
-                                        </div>
+                                        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2">{{ getInitials(emp.name) }}</div>
                                         {{ emp.name }}
                                     </div>
                                 </td>
@@ -126,8 +109,14 @@
                                     <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-xs">-</div>
 
                                     <div v-if="grid[emp.id][date]" 
-                                         class="mx-1 py-2 rounded bg-indigo-100 text-indigo-800 text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default">
-                                        <span class="truncate">{{ grid[emp.id][date].name }}</span>
+                                         :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-indigo-100 text-indigo-800 border-indigo-100'"
+                                         class="mx-1 py-2 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors"
+                                         :title="getWarning(emp.id, date)">
+                                        
+                                        <div class="flex items-center truncate">
+                                            <span v-if="getWarning(emp.id, date)" class="mr-1 text-lg">⚠️</span>
+                                            <span class="truncate">{{ grid[emp.id][date].name }}</span>
+                                        </div>
                                         <button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-indigo-400 hover:text-red-500 font-bold ml-1">&times;</button>
                                     </div>
                                 </td>
@@ -139,7 +128,6 @@
             </div>
 
             <div v-if="modalMode" class="modal-mask" @click.self="modalMode = null">
-                
                 <div v-if="modalMode === 'login'" class="bg-white p-6 rounded shadow-lg w-80">
                     <h3 class="text-lg font-bold mb-4">Admin Access</h3>
                     <input type="password" v-model="passwordInput" placeholder="Password" class="w-full border p-2 rounded mb-4" @keyup.enter="login">
@@ -154,8 +142,9 @@
                     </div>
                     <div class="flex-1 overflow-y-auto border-t pt-2">
                         <div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b">
-                            <span class="font-bold text-gray-700">{{ emp.name }}</span>
-                            <div class="flex items-center space-x-2">
+                            <span class="font-bold text-gray-700 truncate w-32">{{ emp.name }}</span>
+                            <div class="flex items-center space-x-1">
+                                <button @click="openConstraints(emp)" class="text-gray-500 hover:text-gray-800 text-xs font-bold border border-gray-200 px-2 py-1 rounded">Rules</button>
                                 <button @click="updateItem('employees', emp.id, emp.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
                                 <button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button>
                             </div>
@@ -173,7 +162,7 @@
                     <div class="flex-1 overflow-y-auto border-t pt-2">
                         <div v-for="loc in locations" :key="loc.id" class="flex justify-between items-center py-2 border-b">
                             <span class="font-bold text-gray-700">{{ loc.name }}</span>
-                            <div class="flex items-center space-x-2">
+                            <div class="flex items-center space-x-1">
                                 <button @click="updateItem('locations', loc.id, loc.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
                                 <button @click="deleteItem('locations', loc.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button>
                             </div>
@@ -182,153 +171,138 @@
                     <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
 
+                <div v-if="modalMode === 'constraints'" class="bg-white p-6 rounded shadow-lg w-[500px] max-h-[90vh] flex flex-col">
+                    <h3 class="text-lg font-bold mb-2">Rules for <span class="text-indigo-600">{{ selectedEmp.name }}</span></h3>
+                    <p class="text-xs text-gray-500 mb-4">Select items that {{ selectedEmp.name }} CANNOT work with.</p>
+                    
+                    <div class="flex space-x-4 flex-1 overflow-hidden">
+                        <div class="flex-1 flex flex-col border rounded p-2 bg-gray-50">
+                            <h4 class="font-bold text-xs uppercase text-gray-500 mb-2">Avoid Locations</h4>
+                            <div class="overflow-y-auto flex-1 space-y-1">
+                                <label v-for="loc in locations" :key="loc.id" class="flex items-center space-x-2 p-1 bg-white border rounded">
+                                    <input type="checkbox" 
+                                           :checked="constraints[selectedEmp.id].bad_locs.includes(loc.id)" 
+                                           @change="toggleConstraint('location', loc.id, $event)">
+                                    <span class="text-sm">{{ loc.name }}</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="flex-1 flex flex-col border rounded p-2 bg-gray-50">
+                            <h4 class="font-bold text-xs uppercase text-gray-500 mb-2">Avoid Coworkers</h4>
+                            <div class="overflow-y-auto flex-1 space-y-1">
+                                <label v-for="emp in employees" :key="emp.id" v-show="emp.id !== selectedEmp.id" class="flex items-center space-x-2 p-1 bg-white border rounded">
+                                    <input type="checkbox" 
+                                           :checked="constraints[selectedEmp.id].bad_coworkers.includes(emp.id)"
+                                           @change="toggleConstraint('employee', emp.id, $event)">
+                                    <span class="text-sm">{{ emp.name }}</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button @click="modalMode = 'staff'" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded font-bold">Back</button>
+                </div>
+
             </div>
         </div>
     </div>
 
     <script>
         const { createApp, ref, onMounted } = Vue;
-
         createApp({
             setup() {
-                const getMonday = (d) => {
-                    d = new Date(d);
-                    const day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1); 
-                    return new Date(d.setDate(diff));
-                }
-
+                const getMonday = (d) => { d = new Date(d); const day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1); return new Date(d.setDate(diff)); }
                 const currentMonday = ref(getMonday(new Date()).toISOString().split('T')[0]);
-                const employees = ref([]);
-                const locations = ref([]);
-                const weekDates = ref([]);
-                const grid = ref({});
-                const isAdmin = ref(false);
-                const showCoverage = ref(true); 
-                
-                const modalMode = ref(null);
-                const passwordInput = ref("");
-                const newItemName = ref("");
+                const employees = ref([]); const locations = ref([]); const weekDates = ref([]);
+                const grid = ref({}); const constraints = ref({});
+                const isAdmin = ref(false); const showCoverage = ref(true); 
+                const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref("");
+                const selectedEmp = ref(null);
 
                 const fetchData = async () => {
                     const res = await fetch(`/api/roster/${currentMonday.value}`);
                     const data = await res.json();
-                    employees.value = data.employees;
-                    locations.value = data.locations;
-                    weekDates.value = data.week_dates;
-                    grid.value = data.grid;
-                    isAdmin.value = data.is_admin;
+                    employees.value = data.employees; locations.value = data.locations;
+                    weekDates.value = data.week_dates; grid.value = data.grid;
+                    constraints.value = data.constraints; isAdmin.value = data.is_admin;
                 };
 
-                const login = async () => {
-                    const res = await fetch('/api/login', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ password: passwordInput.value })
-                    });
-                    if (res.ok) {
-                        modalMode.value = null;
-                        passwordInput.value = "";
-                        fetchData();
-                    } else {
-                        alert("Incorrect Password");
+                // --- WARNING LOGIC ---
+                const getWarning = (empId, date) => {
+                    const loc = grid.value[empId][date];
+                    if (!loc) return null;
+                    const rule = constraints.value[empId];
+                    if (!rule) return null;
+
+                    // 1. Check Location Warning
+                    if (rule.bad_locs.includes(loc.id)) return `${employees.value.find(e=>e.id==empId).name} avoids ${loc.name}`;
+
+                    // 2. Check Coworker Warning
+                    // Find all other emps at this same location on this date
+                    const coworkers = [];
+                    for(const otherId in grid.value) {
+                        if (parseInt(otherId) !== empId && grid.value[otherId][date] && grid.value[otherId][date].id === loc.id) {
+                            coworkers.push(parseInt(otherId));
+                        }
                     }
+                    // Check intersection
+                    const badApple = coworkers.find(c => rule.bad_coworkers.includes(c));
+                    if (badApple) return `Conflict with ${employees.value.find(e=>e.id==badApple).name}`;
+
+                    return null;
                 };
 
-                const logout = async () => {
-                    await fetch('/api/logout', { method: 'POST' });
-                    fetchData();
-                };
+                // --- Constraint Management ---
+                const openConstraints = (emp) => { selectedEmp.value = emp; modalMode.value = 'constraints'; };
+                const toggleConstraint = async (type, targetId, evt) => {
+                    const empId = selectedEmp.value.id;
+                    const isAdd = evt.target.checked;
+                    const method = isAdd ? 'POST' : 'DELETE';
+                    
+                    // Optimistic Update
+                    const list = type === 'location' ? constraints.value[empId].bad_locs : constraints.value[empId].bad_coworkers;
+                    if(isAdd) list.push(targetId); else { const idx = list.indexOf(targetId); if(idx>-1) list.splice(idx,1); }
 
-                const changeWeek = (days) => {
-                    const date = new Date(currentMonday.value);
-                    date.setDate(date.getDate() + days);
-                    currentMonday.value = date.toISOString().split('T')[0];
-                    fetchData();
-                };
-
-                // --- CRUD Logic ---
-                const createItem = async (type) => {
-                    if(!newItemName.value) return;
-                    await fetch(`/api/${type}`, {
-                        method: 'POST',
+                    await fetch(`/api/constraints/${type}`, {
+                        method: method,
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ name: newItemName.value })
+                        body: JSON.stringify({ employee_id: empId, target_id: targetId })
                     });
-                    newItemName.value = "";
-                    fetchData();
+                    
+                    // Refresh if employee constraint to ensure bi-directional sync on frontend
+                    if(type === 'employee') fetchData();
                 };
 
-                const updateItem = async (type, id, oldName) => {
-                    const newName = prompt("Rename:", oldName);
-                    if (!newName || newName === oldName) return;
-
-                    await fetch(`/api/${type}/${id}`, {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ name: newName })
-                    });
-                    fetchData();
-                };
-
-                const deleteItem = async (type, id) => {
-                    if(!confirm("Are you sure?")) return;
-                    await fetch(`/api/${type}/${id}`, { method: 'DELETE' });
-                    fetchData();
-                };
-
-                const onDragStart = (evt, locId) => {
-                    evt.dataTransfer.effectAllowed = 'copy';
-                    evt.dataTransfer.setData('locId', locId);
-                };
-
-                const onDrop = async (evt, empId, dateStr) => {
-                    if(!isAdmin.value) return;
-                    const locId = evt.dataTransfer.getData('locId');
-                    if (!locId) return;
-
-                    const loc = locations.value.find(l => l.id == locId);
-                    grid.value[empId][dateStr] = loc;
-
-                    await fetch('/api/assign', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ employee_id: empId, date_str: dateStr, location_id: parseInt(locId) })
-                    });
-                };
-
-                const removeShift = async (empId, dateStr) => {
-                    grid.value[empId][dateStr] = null;
-                    await fetch('/api/remove', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ employee_id: empId, date_str: dateStr })
-                    });
-                };
-
-                const getShopCount = (locId, date) => {
-                    let count = 0;
-                    for (const empId in grid.value) {
-                        const shift = grid.value[empId][date];
-                        if (shift && shift.id === locId) count++;
-                    }
-                    return count;
-                };
-
+                // --- Standard CRUD ---
+                const login = async () => { const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: passwordInput.value }) }); if (res.ok) { modalMode.value = null; passwordInput.value = ""; fetchData(); } else alert("Incorrect Password"); };
+                const logout = async () => { await fetch('/api/logout', { method: 'POST' }); fetchData(); };
+                const changeWeek = (days) => { const date = new Date(currentMonday.value); date.setDate(date.getDate() + days); currentMonday.value = date.toISOString().split('T')[0]; fetchData(); };
+                const createItem = async (type) => { if(!newItemName.value) return; await fetch(`/api/${type}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newItemName.value }) }); newItemName.value = ""; fetchData(); };
+                const updateItem = async (type, id, oldName) => { const newName = prompt("Rename:", oldName); if (!newName || newName === oldName) return; await fetch(`/api/${type}/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newName }) }); fetchData(); };
+                const deleteItem = async (type, id) => { if(!confirm("Are you sure?")) return; await fetch(`/api/${type}/${id}`, { method: 'DELETE' }); fetchData(); };
+                
+                // --- Drag/Drop ---
+                const onDragStart = (evt, locId) => { evt.dataTransfer.effectAllowed = 'copy'; evt.dataTransfer.setData('locId', locId); };
+                const onDrop = async (evt, empId, dateStr) => { if(!isAdmin.value) return; const locId = evt.dataTransfer.getData('locId'); if (!locId) return; const loc = locations.value.find(l => l.id == locId); grid.value[empId][dateStr] = loc; await fetch('/api/assign', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, date_str: dateStr, location_id: parseInt(locId) }) }); };
+                const removeShift = async (empId, dateStr) => { grid.value[empId][dateStr] = null; await fetch('/api/remove', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, date_str: dateStr }) }); };
+                
                 // --- Helpers ---
+                const getShopCount = (locId, date) => { let count = 0; for (const empId in grid.value) { const shift = grid.value[empId][date]; if (shift && shift.id === locId) count++; } return count; };
                 const countDays = (empId) => grid.value[empId] ? Object.values(grid.value[empId]).filter(l => l !== null).length : 0;
                 const getDayName = (dStr) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dStr + 'T00:00:00').getDay()];
                 const formatDateShort = (dStr) => dStr.split('-').slice(1).join('/');
                 const formatDateReadable = (dStr) => new Date(dStr + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric' });
                 const getInitials = (name) => name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
                 const showModal = (mode) => { modalMode.value = mode; newItemName.value = ""; };
-
+                
                 onMounted(() => { fetchData(); });
-
+                
                 return { 
-                    currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage,
-                    modalMode, passwordInput, newItemName, showModal,
+                    currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage, constraints,
+                    modalMode, passwordInput, newItemName, selectedEmp, showModal, openConstraints, toggleConstraint,
                     fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem,
-                    onDragStart, onDrop, removeShift, getShopCount,
+                    onDragStart, onDrop, removeShift, getShopCount, getWarning,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
                 };
             }
@@ -336,4 +310,3 @@
     </script>
 </body>
 </html>
-
