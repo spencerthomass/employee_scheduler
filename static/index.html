@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shop Scheduler</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Hide scrollbar for cleaner look */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen overflow-hidden">
+    <div id="app" class="flex h-full">
+        
+        <div class="w-64 bg-white shadow-lg flex flex-col z-10">
+            <div class="p-4 bg-gray-800 text-white font-bold">The Bench</div>
+            <div class="p-2 flex-1 overflow-y-auto bg-gray-50" 
+                 @dragover.prevent @drop="onDrop($event, null)">
+                <div v-if="bench.length === 0" class="text-gray-400 text-sm text-center mt-4">Everyone is working!</div>
+                
+                <div v-for="emp in bench" :key="emp.id" 
+                     draggable="true" @dragstart="onDragStart($event, emp.id)"
+                     class="bg-white p-3 mb-2 rounded shadow border-l-4 border-gray-400 cursor-move hover:bg-gray-100">
+                    {{ emp.name }}
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col min-w-0">
+            <div class="bg-white p-4 shadow flex justify-between items-center z-10">
+                <h1 class="text-xl font-bold text-gray-700">Daily Schedule</h1>
+                <div class="flex items-center space-x-4">
+                    <button @click="changeDate(-1)" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">&lt;</button>
+                    <input type="date" v-model="currentDate" @change="fetchState" class="border p-1 rounded font-mono">
+                    <button @click="changeDate(1)" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">&gt;</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    
+                    <div v-for="loc in locations" :key="loc.id" 
+                         class="bg-white rounded-lg shadow-sm flex flex-col h-64 border border-gray-200"
+                         @dragover.prevent @drop="onDrop($event, loc.id)">
+                        
+                        <div class="p-3 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                            <span class="font-bold text-gray-700">{{ loc.name }}</span>
+                            <span class="text-xs font-mono bg-gray-200 px-2 py-1 rounded">{{ loc.staff.length }} staff</span>
+                        </div>
+
+                        <div class="flex-1 p-2 overflow-y-auto">
+                            <div v-for="emp in loc.staff" :key="emp.id" 
+                                 draggable="true" @dragstart="onDragStart($event, emp.id)"
+                                 class="bg-blue-50 text-blue-800 p-2 mb-2 rounded border border-blue-100 cursor-move text-sm hover:bg-blue-100 flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>
+                                {{ emp.name }}
+                            </div>
+                            <div v-if="loc.staff.length === 0" class="h-full flex items-center justify-center text-gray-300 text-sm border-2 border-dashed border-gray-100 rounded">
+                                Drop Here
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const currentDate = ref(new Date().toISOString().split('T')[0]);
+                const bench = ref([]);
+                const locations = ref([]);
+
+                const fetchState = async () => {
+                    const res = await fetch(`/api/state/${currentDate.value}`);
+                    const data = await res.json();
+                    bench.value = data.bench;
+                    locations.value = data.locations;
+                };
+
+                const changeDate = (days) => {
+                    const date = new Date(currentDate.value);
+                    date.setDate(date.getDate() + days);
+                    currentDate.value = date.toISOString().split('T')[0];
+                    fetchState();
+                };
+
+                const onDragStart = (evt, empId) => {
+                    evt.dataTransfer.effectAllowed = 'move';
+                    evt.dataTransfer.setData('empId', empId);
+                };
+
+                const onDrop = async (evt, locationId) => {
+                    const empId = evt.dataTransfer.getData('empId');
+                    if (!empId) return;
+
+                    // Optimistic update (feels faster)
+                    await fetch('/api/move', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            employee_id: parseInt(empId),
+                            date_str: currentDate.value,
+                            location_id: locationId
+                        })
+                    });
+                    
+                    await fetchState(); // Refresh to ensure sync
+                };
+
+                onMounted(() => {
+                    fetchState();
+                });
+
+                return { currentDate, bench, locations, fetchState, changeDate, onDragStart, onDrop };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
