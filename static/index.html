@@ -9,25 +9,31 @@
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        /* Fixed height for rows to make dragging easy */
         tr.emp-row { height: 60px; }
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+        .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body class="bg-gray-100 h-screen overflow-hidden text-sm">
     <div id="app" class="flex h-full font-sans">
         
-        <div class="w-56 bg-white shadow-xl flex flex-col z-20 border-r border-gray-300">
+        <div v-if="isAdmin" class="w-56 bg-white shadow-xl flex flex-col z-20 border-r border-gray-300">
             <div class="p-4 bg-gray-800 text-white font-bold">
-                Shops / Locations
-                <div class="text-xs font-normal text-gray-400 mt-1">Drag these onto the grid</div>
+                Admin Tools
+                <div class="text-xs font-normal text-gray-400 mt-1">Drag shops to grid</div>
             </div>
+            
             <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
                 <div v-for="loc in locations" :key="loc.id" 
                      draggable="true" @dragstart="onDragStart($event, loc.id)"
-                     class="bg-white p-3 mb-3 rounded shadow-sm border-l-4 border-indigo-500 cursor-move hover:bg-indigo-50 hover:shadow-md transition-all">
+                     class="bg-white p-3 mb-3 rounded shadow-sm border-l-4 border-indigo-500 cursor-move hover:bg-indigo-50 transition-all">
                     <div class="font-bold text-gray-700">{{ loc.name }}</div>
                 </div>
+            </div>
+
+            <div class="p-3 bg-gray-100 border-t space-y-2">
+                <button @click="showModal('staff')" class="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">Manage Staff</button>
+                <button @click="showModal('shops')" class="w-full py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">Manage Shops</button>
             </div>
         </div>
 
@@ -41,8 +47,10 @@
                     </div>
                     <button @click="changeWeek(7)" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded border font-bold text-gray-600">&gt;</button>
                 </div>
+                
                 <div>
-                     <button @click="fetchData" class="text-indigo-600 hover:underline text-xs mr-4">Refresh</button>
+                    <button v-if="!isAdmin" @click="showModal('login')" class="text-indigo-600 hover:underline font-bold px-3">Admin Login</button>
+                    <button v-else @click="logout" class="text-red-600 hover:underline px-3">Logout</button>
                 </div>
             </div>
 
@@ -60,7 +68,6 @@
                     </thead>
                     <tbody>
                         <tr v-for="emp in employees" :key="emp.id" class="emp-row hover:bg-gray-50 transition-colors">
-                            
                             <td class="p-3 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm">
                                 <div class="flex items-center">
                                     <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-3">
@@ -69,31 +76,63 @@
                                     {{ emp.name }}
                                 </div>
                             </td>
-
                             <td v-for="date in weekDates" :key="date"
                                 @dragover.prevent @drop="onDrop($event, emp.id, date)"
                                 class="border-r p-1 text-center relative group">
                                 
-                                <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-xs font-mono">
-                                    -
-                                </div>
+                                <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-xs">-</div>
 
                                 <div v-if="grid[emp.id][date]" 
                                      class="mx-1 py-2 rounded bg-indigo-100 text-indigo-800 text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell">
                                     <span class="truncate">{{ grid[emp.id][date].name }}</span>
-                                    <button @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-indigo-400 hover:text-red-500 font-bold ml-1">
-                                        &times;
-                                    </button>
+                                    <button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-indigo-400 hover:text-red-500 font-bold ml-1">&times;</button>
                                 </div>
                             </td>
-
-                            <td class="text-center font-bold text-gray-500">
-                                {{ countDays(emp.id) }}
-                            </td>
+                            <td class="text-center font-bold text-gray-500">{{ countDays(emp.id) }}</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <div v-if="modalMode" class="modal-mask" @click.self="modalMode = null">
+            
+            <div v-if="modalMode === 'login'" class="bg-white p-6 rounded shadow-lg w-80">
+                <h3 class="text-lg font-bold mb-4">Admin Access</h3>
+                <input type="password" v-model="passwordInput" placeholder="Password" class="w-full border p-2 rounded mb-4" @keyup.enter="login">
+                <button @click="login" class="w-full bg-indigo-600 text-white py-2 rounded font-bold">Login</button>
+            </div>
+
+            <div v-if="modalMode === 'staff'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
+                <h3 class="text-lg font-bold mb-4">Manage Employees</h3>
+                <div class="flex mb-4">
+                    <input v-model="newItemName" placeholder="New Employee Name" class="border p-2 rounded-l flex-1">
+                    <button @click="createItem('employees')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button>
+                </div>
+                <div class="flex-1 overflow-y-auto border-t pt-2">
+                    <div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b">
+                        <span>{{ emp.name }}</span>
+                        <button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 font-bold text-sm">Delete</button>
+                    </div>
+                </div>
+                <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
+            </div>
+
+            <div v-if="modalMode === 'shops'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
+                <h3 class="text-lg font-bold mb-4">Manage Shops</h3>
+                <div class="flex mb-4">
+                    <input v-model="newItemName" placeholder="New Shop Name" class="border p-2 rounded-l flex-1">
+                    <button @click="createItem('locations')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button>
+                </div>
+                <div class="flex-1 overflow-y-auto border-t pt-2">
+                    <div v-for="loc in locations" :key="loc.id" class="flex justify-between items-center py-2 border-b">
+                        <span>{{ loc.name }}</span>
+                        <button @click="deleteItem('locations', loc.id)" class="text-red-500 hover:text-red-700 font-bold text-sm">Delete</button>
+                    </div>
+                </div>
+                <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
+            </div>
+
         </div>
     </div>
 
@@ -113,6 +152,12 @@
                 const locations = ref([]);
                 const weekDates = ref([]);
                 const grid = ref({});
+                const isAdmin = ref(false);
+                
+                // Modal State
+                const modalMode = ref(null);
+                const passwordInput = ref("");
+                const newItemName = ref("");
 
                 const fetchData = async () => {
                     const res = await fetch(`/api/roster/${currentMonday.value}`);
@@ -121,12 +166,51 @@
                     locations.value = data.locations;
                     weekDates.value = data.week_dates;
                     grid.value = data.grid;
+                    isAdmin.value = data.is_admin;
+                };
+
+                const login = async () => {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ password: passwordInput.value })
+                    });
+                    if (res.ok) {
+                        modalMode.value = null;
+                        passwordInput.value = "";
+                        fetchData(); // Refresh to get admin state
+                    } else {
+                        alert("Incorrect Password");
+                    }
+                };
+
+                const logout = async () => {
+                    await fetch('/api/logout', { method: 'POST' });
+                    fetchData();
                 };
 
                 const changeWeek = (days) => {
                     const date = new Date(currentMonday.value);
                     date.setDate(date.getDate() + days);
                     currentMonday.value = date.toISOString().split('T')[0];
+                    fetchData();
+                };
+
+                // --- CRUD Logic ---
+                const createItem = async (type) => {
+                    if(!newItemName.value) return;
+                    await fetch(`/api/${type}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ name: newItemName.value })
+                    });
+                    newItemName.value = "";
+                    fetchData();
+                };
+
+                const deleteItem = async (type, id) => {
+                    if(!confirm("Are you sure? This will delete all shifts associated with this item.")) return;
+                    await fetch(`/api/${type}/${id}`, { method: 'DELETE' });
                     fetchData();
                 };
 
@@ -137,29 +221,23 @@
                 };
 
                 const onDrop = async (evt, empId, dateStr) => {
+                    if(!isAdmin.value) return; // Guard
                     const locId = evt.dataTransfer.getData('locId');
                     if (!locId) return;
 
-                    // Optimistic Update
+                    // Optimistic
                     const loc = locations.value.find(l => l.id == locId);
                     grid.value[empId][dateStr] = loc;
 
-                    // Save to Server
                     await fetch('/api/assign', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            employee_id: empId,
-                            date_str: dateStr,
-                            location_id: parseInt(locId)
-                        })
+                        body: JSON.stringify({ employee_id: empId, date_str: dateStr, location_id: parseInt(locId) })
                     });
                 };
 
                 const removeShift = async (empId, dateStr) => {
-                    // Optimistic Remove
                     grid.value[empId][dateStr] = null;
-
                     await fetch('/api/remove', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -168,26 +246,20 @@
                 };
 
                 // --- Helpers ---
-                const countDays = (empId) => {
-                    if (!grid.value[empId]) return 0;
-                    return Object.values(grid.value[empId]).filter(l => l !== null).length;
-                };
-                
-                const getDayName = (dStr) => {
-                    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                    return days[new Date(dStr + 'T00:00:00').getDay()];
-                };
+                const countDays = (empId) => grid.value[empId] ? Object.values(grid.value[empId]).filter(l => l !== null).length : 0;
+                const getDayName = (dStr) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dStr + 'T00:00:00').getDay()];
                 const formatDateShort = (dStr) => dStr.split('-').slice(1).join('/');
                 const formatDateReadable = (dStr) => new Date(dStr + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric' });
                 const getInitials = (name) => name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+                const showModal = (mode) => { modalMode.value = mode; newItemName.value = ""; };
 
-                onMounted(() => {
-                    fetchData();
-                });
+                onMounted(() => { fetchData(); });
 
                 return { 
-                    currentMonday, employees, locations, weekDates, grid,
-                    fetchData, changeWeek, onDragStart, onDrop, removeShift,
+                    currentMonday, employees, locations, weekDates, grid, isAdmin,
+                    modalMode, passwordInput, newItemName, showModal,
+                    fetchData, changeWeek, login, logout, createItem, deleteItem,
+                    onDragStart, onDrop, removeShift,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
                 };
             }
