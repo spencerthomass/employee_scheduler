@@ -223,7 +223,11 @@
                 const fetchData = async () => {
                     const res = await fetch(`/api/roster/${currentMonday.value}`);
                     const data = await res.json();
-                    employees.value = data.employees; locations.value = data.locations;
+                    
+                    // CHANGED: Client-side sorting as a safety measure
+                    employees.value = data.employees.sort((a,b) => a.name.localeCompare(b.name));
+                    locations.value = data.locations.sort((a,b) => a.name.localeCompare(b.name));
+                    
                     weekDates.value = data.week_dates; grid.value = data.grid;
                     constraints.value = data.constraints; isAdmin.value = data.is_admin;
                 };
@@ -235,46 +239,31 @@
                     const rule = constraints.value[empId];
                     if (!rule) return null;
 
-                    // 1. Check Location Warning
                     if (rule.bad_locs.includes(loc.id)) return `${employees.value.find(e=>e.id==empId).name} avoids ${loc.name}`;
 
-                    // 2. Check Coworker Warning
-                    // Find all other emps at this same location on this date
                     const coworkers = [];
                     for(const otherId in grid.value) {
                         if (parseInt(otherId) !== empId && grid.value[otherId][date] && grid.value[otherId][date].id === loc.id) {
                             coworkers.push(parseInt(otherId));
                         }
                     }
-                    // Check intersection
                     const badApple = coworkers.find(c => rule.bad_coworkers.includes(c));
                     if (badApple) return `Conflict with ${employees.value.find(e=>e.id==badApple).name}`;
 
                     return null;
                 };
 
-                // --- Constraint Management ---
                 const openConstraints = (emp) => { selectedEmp.value = emp; modalMode.value = 'constraints'; };
                 const toggleConstraint = async (type, targetId, evt) => {
                     const empId = selectedEmp.value.id;
                     const isAdd = evt.target.checked;
                     const method = isAdd ? 'POST' : 'DELETE';
-                    
-                    // Optimistic Update
                     const list = type === 'location' ? constraints.value[empId].bad_locs : constraints.value[empId].bad_coworkers;
                     if(isAdd) list.push(targetId); else { const idx = list.indexOf(targetId); if(idx>-1) list.splice(idx,1); }
-
-                    await fetch(`/api/constraints/${type}`, {
-                        method: method,
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ employee_id: empId, target_id: targetId })
-                    });
-                    
-                    // Refresh if employee constraint to ensure bi-directional sync on frontend
+                    await fetch(`/api/constraints/${type}`, { method: method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, target_id: targetId }) });
                     if(type === 'employee') fetchData();
                 };
 
-                // --- Standard CRUD ---
                 const login = async () => { const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: passwordInput.value }) }); if (res.ok) { modalMode.value = null; passwordInput.value = ""; fetchData(); } else alert("Incorrect Password"); };
                 const logout = async () => { await fetch('/api/logout', { method: 'POST' }); fetchData(); };
                 const changeWeek = (days) => { const date = new Date(currentMonday.value); date.setDate(date.getDate() + days); currentMonday.value = date.toISOString().split('T')[0]; fetchData(); };
@@ -282,12 +271,10 @@
                 const updateItem = async (type, id, oldName) => { const newName = prompt("Rename:", oldName); if (!newName || newName === oldName) return; await fetch(`/api/${type}/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newName }) }); fetchData(); };
                 const deleteItem = async (type, id) => { if(!confirm("Are you sure?")) return; await fetch(`/api/${type}/${id}`, { method: 'DELETE' }); fetchData(); };
                 
-                // --- Drag/Drop ---
                 const onDragStart = (evt, locId) => { evt.dataTransfer.effectAllowed = 'copy'; evt.dataTransfer.setData('locId', locId); };
                 const onDrop = async (evt, empId, dateStr) => { if(!isAdmin.value) return; const locId = evt.dataTransfer.getData('locId'); if (!locId) return; const loc = locations.value.find(l => l.id == locId); grid.value[empId][dateStr] = loc; await fetch('/api/assign', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, date_str: dateStr, location_id: parseInt(locId) }) }); };
                 const removeShift = async (empId, dateStr) => { grid.value[empId][dateStr] = null; await fetch('/api/remove', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, date_str: dateStr }) }); };
                 
-                // --- Helpers ---
                 const getShopCount = (locId, date) => { let count = 0; for (const empId in grid.value) { const shift = grid.value[empId][date]; if (shift && shift.id === locId) count++; } return count; };
                 const countDays = (empId) => grid.value[empId] ? Object.values(grid.value[empId]).filter(l => l !== null).length : 0;
                 const getDayName = (dStr) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dStr + 'T00:00:00').getDay()];
