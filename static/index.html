@@ -227,3 +227,89 @@
 
                 const changeWeek = (days) => {
                     const date = new Date(currentMonday.value);
+                    date.setDate(date.getDate() + days);
+                    currentMonday.value = date.toISOString().split('T')[0];
+                    fetchData();
+                };
+
+                const createItem = async (type) => {
+                    if(!newItemName.value) return;
+                    await fetch(`/api/${type}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ name: newItemName.value })
+                    });
+                    newItemName.value = "";
+                    fetchData();
+                };
+
+                const deleteItem = async (type, id) => {
+                    if(!confirm("Are you sure?")) return;
+                    await fetch(`/api/${type}/${id}`, { method: 'DELETE' });
+                    fetchData();
+                };
+
+                const onDragStart = (evt, locId) => {
+                    evt.dataTransfer.effectAllowed = 'copy';
+                    evt.dataTransfer.setData('locId', locId);
+                };
+
+                const onDrop = async (evt, empId, dateStr) => {
+                    if(!isAdmin.value) return;
+                    const locId = evt.dataTransfer.getData('locId');
+                    if (!locId) return;
+
+                    const loc = locations.value.find(l => l.id == locId);
+                    grid.value[empId][dateStr] = loc; // Optimistic update
+
+                    await fetch('/api/assign', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ employee_id: empId, date_str: dateStr, location_id: parseInt(locId) })
+                    });
+                };
+
+                const removeShift = async (empId, dateStr) => {
+                    grid.value[empId][dateStr] = null;
+                    await fetch('/api/remove', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ employee_id: empId, date_str: dateStr })
+                    });
+                };
+
+                // --- Coverage Logic ---
+                const getShopCount = (locId, date) => {
+                    let count = 0;
+                    // Loop through all employees to calculate totals for this specific day/shop
+                    for (const empId in grid.value) {
+                        const shift = grid.value[empId][date];
+                        if (shift && shift.id === locId) {
+                            count++;
+                        }
+                    }
+                    return count;
+                };
+
+                // --- Helpers ---
+                const countDays = (empId) => grid.value[empId] ? Object.values(grid.value[empId]).filter(l => l !== null).length : 0;
+                const getDayName = (dStr) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dStr + 'T00:00:00').getDay()];
+                const formatDateShort = (dStr) => dStr.split('-').slice(1).join('/');
+                const formatDateReadable = (dStr) => new Date(dStr + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric' });
+                const getInitials = (name) => name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+                const showModal = (mode) => { modalMode.value = mode; newItemName.value = ""; };
+
+                onMounted(() => { fetchData(); });
+
+                return { 
+                    currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage,
+                    modalMode, passwordInput, newItemName, showModal,
+                    fetchData, changeWeek, login, logout, createItem, deleteItem,
+                    onDragStart, onDrop, removeShift, getShopCount,
+                    getDayName, formatDateShort, formatDateReadable, countDays, getInitials
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
