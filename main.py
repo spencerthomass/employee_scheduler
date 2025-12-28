@@ -23,11 +23,11 @@ class DeleteRequest(BaseModel):
 
 # --- APIs ---
 
-@app.get("/api/week/{start_date_str}")
-def get_week_state(start_date_str: str):
-    """Returns the schedule for 7 days starting from start_date_str."""
+@app.get("/api/roster/{start_date_str}")
+def get_roster_state(start_date_str: str):
+    """Returns the schedule organized by Employee for the week."""
     
-    # Calculate the 7 dates in this week
+    # Calculate the 7 dates
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
     
@@ -35,24 +35,22 @@ def get_week_state(start_date_str: str):
         employees = session.exec(select(Employee).where(Employee.active == True)).all()
         locations = session.exec(select(Location)).all()
         
-        # Get all shifts that happen in this date range
-        # Note: SQLModel string comparison works for ISO dates
+        # Get shifts for this week
         shifts = session.exec(select(Shift).where(
             Shift.date_str >= week_dates[0],
             Shift.date_str <= week_dates[6]
         )).all()
 
-        # Build the Grid: Location -> Date -> List of Employees
-        # Structure: grid[location_id][date_str] = [Employee, Employee]
-        grid = {}
-        for loc in locations:
-            grid[loc.id] = {d: [] for d in week_dates}
+        # Build Grid: grid[employee_id][date_str] = Location object
+        grid = {e.id: {d: None for d in week_dates} for e in employees}
+        
+        # Helper map to look up location details quickly
+        loc_map = {l.id: l for l in locations}
 
         for shift in shifts:
-            if shift.location_id in grid and shift.date_str in grid[shift.location_id]:
-                emp = next((e for e in employees if e.id == shift.employee_id), None)
-                if emp:
-                    grid[shift.location_id][shift.date_str].append(emp)
+            if shift.employee_id in grid and shift.date_str in grid[shift.employee_id]:
+                if shift.location_id in loc_map:
+                    grid[shift.employee_id][shift.date_str] = loc_map[shift.location_id]
 
         return {
             "week_dates": week_dates,
@@ -62,10 +60,10 @@ def get_week_state(start_date_str: str):
         }
 
 @app.post("/api/assign")
-def assign_employee(req: MoveRequest):
+def assign_shift(req: MoveRequest):
     with Session(engine) as session:
-        # 1. Ensure employee isn't already working SOMEWHERE else on this specific day
-        # (Optional rule: If you want to allow re-assigning, we delete old shift first)
+        # 1. Delete any existing shift for this employee on this day
+        # (This allows overwriting: Dragging "Lehi" onto "Sandy" replaces it)
         existing = session.exec(select(Shift).where(
             Shift.employee_id == req.employee_id,
             Shift.date_str == req.date_str
@@ -74,7 +72,7 @@ def assign_employee(req: MoveRequest):
         if existing:
             session.delete(existing)
 
-        # 2. Add new shift
+        # 2. Add the new shift
         new_shift = Shift(
             employee_id=req.employee_id,
             location_id=req.location_id,
@@ -85,8 +83,7 @@ def assign_employee(req: MoveRequest):
     return {"status": "ok"}
 
 @app.post("/api/remove")
-def remove_employee(req: DeleteRequest):
-    """Removes an employee from a specific day."""
+def remove_shift(req: DeleteRequest):
     with Session(engine) as session:
         statement = delete(Shift).where(
             Shift.employee_id == req.employee_id, 
