@@ -14,7 +14,9 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        tr.emp-row { height: 50px; }
+        /* UPDATED: Reduced height from 50px to 38px */
+        tr.emp-row { height: 38px; }
+        
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
         
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
@@ -119,7 +121,7 @@
                         </thead>
                         <tbody>
                             <tr v-for="emp in employees" :key="emp.id" class="emp-row hover:bg-gray-50 transition-colors">
-                                <td class="col-name p-3 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
+                                <td class="col-name px-3 py-1 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
                                     <div class="flex items-center">
                                         <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2 shrink-0">{{ getInitials(emp.name) }}</div>
                                         <span class="truncate">{{ emp.name }}</span>
@@ -133,7 +135,7 @@
 
                                     <div v-if="grid[emp.id][date]" 
                                          :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-indigo-100 text-indigo-800 border-indigo-100'"
-                                         class="mx-1 py-2 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors select-none"
+                                         class="mx-1 py-1 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors select-none"
                                          :title="getWarning(emp.id, date)">
                                         
                                         <div class="flex items-center truncate">
@@ -227,7 +229,6 @@
         const { createApp, ref, onMounted } = Vue;
         createApp({
             setup() {
-                // Timezone-safe date helper
                 const toIsoDate = (d) => {
                     const year = d.getFullYear();
                     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -292,7 +293,7 @@
                 const logout = async () => { await fetch('/api/logout', { method: 'POST' }); fetchData(); };
                 
                 const changeWeek = (days) => { 
-                    const d = new Date(currentMonday.value + 'T00:00:00'); // Force local midnight
+                    const d = new Date(currentMonday.value + 'T00:00:00');
                     d.setDate(d.getDate() + days);
                     currentMonday.value = toIsoDate(d);
                     fetchData(); 
@@ -309,7 +310,6 @@
                 const getShopCount = (locId, date) => { let count = 0; for (const empId in grid.value) { const shift = grid.value[empId][date]; if (shift && shift.id === locId) count++; } return count; };
                 const countDays = (empId) => grid.value[empId] ? Object.values(grid.value[empId]).filter(l => l !== null).length : 0;
                 
-                // FORCE local time display for column headers
                 const getDayName = (dStr) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dStr + 'T00:00:00').getDay()];
                 const formatDateShort = (dStr) => dStr.split('-').slice(1).join('/');
                 const formatDateReadable = (dStr) => new Date(dStr + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric' });
