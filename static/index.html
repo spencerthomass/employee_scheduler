@@ -4,73 +4,88 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emissions Plus Scheduler</title>
+    
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
         tr.emp-row { height: 50px; }
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+        
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
+        
+        /* Column Widths */
         .col-name { width: 200px; min-width: 200px; }
         .col-day { width: 120px; min-width: 120px; }
         .col-total { width: 80px; min-width: 80px; }
     </style>
 </head>
 <body class="bg-gray-100 h-screen overflow-hidden text-sm">
-    <div id="app" class="flex h-full font-sans">
+    <div id="app" class="flex flex-col md:flex-row h-full font-sans">
         
-        <div v-if="isAdmin" class="w-56 bg-white shadow-xl flex flex-col z-20 border-r border-gray-300 transition-all">
-            <div class="p-4 bg-gray-800 text-white font-bold">
-                Admin Tools
-                <div class="text-xs font-normal text-gray-400 mt-1">Drag shops to grid</div>
+        <div v-if="isAdmin" class="w-full h-48 md:w-56 md:h-auto bg-white shadow-xl flex flex-col z-20 border-b md:border-b-0 md:border-r border-gray-300 transition-all shrink-0">
+            <div class="p-4 bg-gray-800 text-white font-bold flex justify-between items-center">
+                <div>
+                    Admin Tools
+                    <div class="text-xs font-normal text-gray-400 mt-1">Drag shops to grid</div>
+                </div>
+                <div class="md:hidden text-xs text-gray-400">
+                    (Scroll Down for Schedule)
+                </div>
             </div>
+            
             <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
                 <div v-for="loc in locations" :key="loc.id" 
                      draggable="true" @dragstart="onDragStart($event, loc.id)"
-                     class="bg-white p-3 mb-3 rounded shadow-sm border-l-4 border-indigo-500 cursor-move hover:bg-indigo-50 transition-all">
+                     class="bg-white p-3 mb-3 rounded shadow-sm border-l-4 border-indigo-500 cursor-move hover:bg-indigo-50 transition-all select-none touch-manipulation">
                     <div class="font-bold text-gray-700">{{ loc.name }}</div>
                 </div>
             </div>
+            
             <div class="p-3 bg-gray-100 border-t space-y-2">
                 <button @click="showModal('staff')" class="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow">Manage Staff</button>
                 <button @click="showModal('shops')" class="w-full py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow">Manage Shops</button>
             </div>
         </div>
 
-        <div class="flex-1 flex flex-col min-w-0">
+        <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
             
-            <div class="bg-white border-b p-3 flex justify-between items-center shadow-sm z-10">
+            <div class="bg-white border-b p-3 flex justify-between items-center shadow-sm z-10 shrink-0 gap-2 overflow-x-auto">
                 
-                <div class="flex items-center space-x-6">
-                    <div class="flex items-center">
+                <div class="flex items-center space-x-2 md:space-x-6">
+                    <div class="flex items-center shrink-0">
                         <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" 
                              alt="Emissions Plus" 
-                             class="h-10 mr-3">
-                        <span class="text-gray-700 font-extrabold text-xl tracking-tight hidden md:block">Scheduler</span>
+                             class="h-8 md:h-10 mr-2 md:mr-3">
+                        <span class="text-gray-700 font-extrabold text-lg md:text-xl tracking-tight hidden md:block">Scheduler</span>
                     </div>
 
-                    <div class="flex items-center bg-gray-100 rounded-lg p-1 border">
+                    <div class="flex items-center bg-gray-100 rounded-lg p-1 border shrink-0">
                         <button @click="changeWeek(-7)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold">&lt;</button>
-                        <span class="px-4 font-bold text-gray-700 text-sm whitespace-nowrap">Week of {{ formatDateReadable(weekDates[0]) }}</span>
+                        <span class="px-2 md:px-4 font-bold text-gray-700 text-xs md:text-sm whitespace-nowrap">{{ formatDateReadable(weekDates[0]) }}</span>
                         <button @click="changeWeek(7)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold">&gt;</button>
                     </div>
                 </div>
                 
-                <div class="flex items-center space-x-4">
-                    <label class="flex items-center space-x-2 cursor-pointer select-none">
+                <div class="flex items-center space-x-2 md:space-x-4 shrink-0">
+                    <label class="hidden md:flex items-center space-x-2 cursor-pointer select-none">
                         <input type="checkbox" v-model="showCoverage" class="form-checkbox h-4 w-4 text-indigo-600">
-                        <span class="text-gray-600 font-bold text-xs">Show Shop Counts</span>
+                        <span class="text-gray-600 font-bold text-xs">Shop Counts</span>
                     </label>
-                    <div class="h-6 w-px bg-gray-300"></div>
-                    <button v-if="!isAdmin" @click="showModal('login')" class="text-indigo-600 hover:underline font-bold px-3">Admin Login</button>
-                    <button v-else @click="logout" class="text-red-600 hover:underline px-3">Logout</button>
+                    <div class="h-6 w-px bg-gray-300 hidden md:block"></div>
+                    <button v-if="!isAdmin" @click="showModal('login')" class="text-indigo-600 hover:underline font-bold px-2 md:px-3 text-xs md:text-sm">Admin Login</button>
+                    <button v-else @click="logout" class="text-red-600 hover:underline px-2 md:px-3 text-xs md:text-sm">Logout</button>
                 </div>
             </div>
 
-            <div class="flex-1 overflow-auto bg-gray-50 flex flex-col">
+            <div class="flex-1 overflow-auto bg-gray-50 flex flex-col relative">
                 
-                <div v-if="showCoverage" class="bg-white border-b-4 border-gray-200 p-4 shadow-sm shrink-0">
+                <div v-if="showCoverage" class="bg-white border-b-4 border-gray-200 p-4 shadow-sm shrink-0 overflow-x-auto">
                     <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Shop Coverage</h2>
                     <table class="w-full border-collapse text-xs">
                         <thead>
@@ -99,31 +114,31 @@
                     <table class="w-full border-collapse">
                         <thead class="sticky top-0 z-10 bg-gray-100 shadow-sm">
                             <tr>
-                                <th class="col-name p-3 text-left text-gray-600 font-bold border-r">Employee</th>
-                                <th v-for="date in weekDates" :key="date" class="col-day p-2 text-center border-r">
+                                <th class="col-name p-3 text-left text-gray-600 font-bold border-r bg-gray-100">Employee</th>
+                                <th v-for="date in weekDates" :key="date" class="col-day p-2 text-center border-r bg-gray-100">
                                     <div class="font-bold text-gray-800">{{ getDayName(date) }}</div>
                                     <div class="text-xs text-gray-500">{{ formatDateShort(date) }}</div>
                                 </th>
-                                <th class="col-total p-2 text-center text-gray-600 font-bold">Total</th>
+                                <th class="col-total p-2 text-center text-gray-600 font-bold bg-gray-100">Total</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="emp in employees" :key="emp.id" class="emp-row hover:bg-gray-50 transition-colors">
                                 <td class="col-name p-3 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
                                     <div class="flex items-center">
-                                        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2">{{ getInitials(emp.name) }}</div>
-                                        {{ emp.name }}
+                                        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2 shrink-0">{{ getInitials(emp.name) }}</div>
+                                        <span class="truncate">{{ emp.name }}</span>
                                     </div>
                                 </td>
                                 <td v-for="date in weekDates" :key="date"
                                     @dragover.prevent @drop="onDrop($event, emp.id, date)"
-                                    class="col-day border-r border-b p-1 text-center relative group">
+                                    class="col-day border-r border-b p-1 text-center relative group touch-manipulation">
                                     
-                                    <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-xs">-</div>
+                                    <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-xs select-none">-</div>
 
                                     <div v-if="grid[emp.id][date]" 
                                          :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-indigo-100 text-indigo-800 border-indigo-100'"
-                                         class="mx-1 py-2 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors"
+                                         class="mx-1 py-2 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors select-none"
                                          :title="getWarning(emp.id, date)">
                                         
                                         <div class="flex items-center truncate">
@@ -297,3 +312,4 @@
     </script>
 </body>
 </html>
+
