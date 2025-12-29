@@ -29,15 +29,12 @@
     <div id="app" class="flex flex-col md:flex-row h-full font-sans">
         
         <div v-if="isAdmin" class="w-full h-80 md:w-56 md:h-auto bg-white shadow-xl flex flex-col z-20 border-b md:border-b-0 md:border-r border-gray-300 transition-all shrink-0">
-            
             <div class="p-4 bg-gray-800 text-white font-bold flex justify-between items-center shrink-0">
                 <div>
                     Admin Tools
                     <div class="text-xs font-normal text-gray-400 mt-1">Drag shops to grid</div>
                 </div>
-                <div class="md:hidden text-xs text-gray-400">
-                    (Scroll for Sched)
-                </div>
+                <div class="md:hidden text-xs text-gray-400">(Scroll for Sched)</div>
             </div>
             
             <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
@@ -57,12 +54,9 @@
         <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
             
             <div class="bg-white border-b p-3 flex justify-between items-center shadow-sm z-10 shrink-0 gap-2 overflow-x-auto">
-                
                 <div class="flex items-center space-x-2 md:space-x-6">
                     <div class="flex items-center shrink-0">
-                        <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" 
-                             alt="Emissions Plus" 
-                             class="h-8 md:h-10 mr-2 md:mr-3">
+                        <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" alt="Emissions Plus" class="h-8 md:h-10 mr-2 md:mr-3">
                         <span class="text-gray-700 font-extrabold text-lg md:text-xl tracking-tight hidden md:block">Scheduler</span>
                     </div>
 
@@ -233,8 +227,22 @@
         const { createApp, ref, onMounted } = Vue;
         createApp({
             setup() {
-                const getMonday = (d) => { d = new Date(d); const day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1); return new Date(d.setDate(diff)); }
-                const currentMonday = ref(getMonday(new Date()).toISOString().split('T')[0]);
+                // Timezone-safe date helper
+                const toIsoDate = (d) => {
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                const getMonday = (d) => {
+                    d = new Date(d);
+                    const day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1);
+                    d.setDate(diff);
+                    return d;
+                }
+
+                const currentMonday = ref(toIsoDate(getMonday(new Date())));
                 const employees = ref([]); const locations = ref([]); const weekDates = ref([]);
                 const grid = ref({}); const constraints = ref({});
                 const isAdmin = ref(false); 
@@ -282,7 +290,14 @@
 
                 const login = async () => { const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: passwordInput.value }) }); if (res.ok) { modalMode.value = null; passwordInput.value = ""; fetchData(); } else alert("Incorrect Password"); };
                 const logout = async () => { await fetch('/api/logout', { method: 'POST' }); fetchData(); };
-                const changeWeek = (days) => { const date = new Date(currentMonday.value); date.setDate(date.getDate() + days); currentMonday.value = date.toISOString().split('T')[0]; fetchData(); };
+                
+                const changeWeek = (days) => { 
+                    const d = new Date(currentMonday.value + 'T00:00:00'); // Force local midnight
+                    d.setDate(d.getDate() + days);
+                    currentMonday.value = toIsoDate(d);
+                    fetchData(); 
+                };
+                
                 const createItem = async (type) => { if(!newItemName.value) return; await fetch(`/api/${type}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newItemName.value }) }); newItemName.value = ""; fetchData(); };
                 const updateItem = async (type, id, oldName) => { const newName = prompt("Rename:", oldName); if (!newName || newName === oldName) return; await fetch(`/api/${type}/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newName }) }); fetchData(); };
                 const deleteItem = async (type, id) => { if(!confirm("Are you sure?")) return; await fetch(`/api/${type}/${id}`, { method: 'DELETE' }); fetchData(); };
@@ -293,6 +308,8 @@
                 
                 const getShopCount = (locId, date) => { let count = 0; for (const empId in grid.value) { const shift = grid.value[empId][date]; if (shift && shift.id === locId) count++; } return count; };
                 const countDays = (empId) => grid.value[empId] ? Object.values(grid.value[empId]).filter(l => l !== null).length : 0;
+                
+                // FORCE local time display for column headers
                 const getDayName = (dStr) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dStr + 'T00:00:00').getDay()];
                 const formatDateShort = (dStr) => dStr.split('-').slice(1).join('/');
                 const formatDateReadable = (dStr) => new Date(dStr + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric' });
@@ -313,4 +330,3 @@
     </script>
 </body>
 </html>
-
