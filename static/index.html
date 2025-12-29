@@ -14,14 +14,11 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* UPDATED: Reduced height from 50px to 38px */
         tr.emp-row { height: 38px; }
-        
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
         
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
         
-        /* Column Widths */
         .col-name { width: 200px; min-width: 200px; }
         .col-day { width: 120px; min-width: 120px; }
         .col-total { width: 80px; min-width: 80px; }
@@ -107,8 +104,8 @@
                     </table>
                 </div>
 
-                <div class="bg-white flex-1 min-h-0">
-                    <table class="w-full border-collapse">
+                <div class="flex-1 min-h-0">
+                    <table class="w-full border-collapse bg-white">
                         <thead class="sticky top-0 z-10 bg-gray-100 shadow-sm">
                             <tr>
                                 <th class="col-name p-3 text-left text-gray-600 font-bold border-r bg-gray-100">Employee</th>
@@ -120,7 +117,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="emp in employees" :key="emp.id" class="emp-row hover:bg-gray-50 transition-colors">
+                            <tr v-for="emp in employees" :key="emp.id" class="emp-row bg-white hover:bg-gray-50 transition-colors">
                                 <td class="col-name px-3 py-1 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
                                     <div class="flex items-center">
                                         <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2 shrink-0">{{ getInitials(emp.name) }}</div>
