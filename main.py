@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, delete, or_
-from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay
+from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
@@ -47,10 +47,11 @@ def get_roster_state(start_date_str: str, request: Request):
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
         loc_preferences = session.exec(select(LocationPreference)).all()
         day_constraints = session.exec(select(EmployeeUnavailableDay)).all()
+        target_days = session.exec(select(EmployeeTargetDays)).all()
 
         # Build Constraints Map
-        # constraints[emp_id] = { bad_locs: [], bad_coworkers: [], preferred_locs: [], bad_days: [] }
-        constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "bad_days": []} for e in employees}
+        # constraints[emp_id] = { bad_locs: [], bad_coworkers: [], preferred_locs: [], bad_days: [], target_days: None }
+        constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "bad_days": [], "target_days": None} for e in employees}
         
         for lc in loc_constraints:
             if lc.employee_id in constraints: constraints[lc.employee_id]["bad_locs"].append(lc.location_id)
@@ -64,6 +65,9 @@ def get_roster_state(start_date_str: str, request: Request):
 
         for dc in day_constraints:
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
+            
+        for td in target_days:
+            if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = td.target_days
 
         grid = {e.id: {d: None for d in week_dates} for e in employees}
         loc_map = {l.id: l for l in locations}
@@ -134,11 +138,11 @@ def update_employee(id: int, req: NameRequest):
 def delete_employee(id: int):
     with Session(engine) as session:
         session.exec(delete(Shift).where(Shift.employee_id == id))
-        # Cleanup all constraints
         session.exec(delete(LocationConstraint).where(LocationConstraint.employee_id == id))
         session.exec(delete(EmployeeConstraint).where(or_(EmployeeConstraint.employee_id == id, EmployeeConstraint.target_employee_id == id)))
         session.exec(delete(LocationPreference).where(LocationPreference.employee_id == id))
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id == id))
+        session.exec(delete(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == id))
         session.exec(delete(Employee).where(Employee.id == id))
         session.commit()
     return {"status": "ok"}
@@ -222,10 +226,8 @@ def remove_loc_preference(req: ConstraintRequest):
         session.commit()
     return {"status": "ok"}
 
-# NEW: Day Constraints
 @app.post("/api/constraints/day", dependencies=[Depends(get_current_admin)])
 def add_day_constraint(req: ConstraintRequest):
-    # Reusing ConstraintRequest, target_id will be the day index (0-6)
     with Session(engine) as session:
         exists = session.exec(select(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id==req.employee_id, EmployeeUnavailableDay.day_of_week==req.target_id)).first()
         if not exists:
@@ -237,6 +239,20 @@ def add_day_constraint(req: ConstraintRequest):
 def remove_day_constraint(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id==req.employee_id, EmployeeUnavailableDay.day_of_week==req.target_id))
+        session.commit()
+    return {"status": "ok"}
+
+# NEW: Target Days Routes
+@app.post("/api/constraints/target_days", dependencies=[Depends(get_current_admin)])
+def set_target_days(req: ConstraintRequest):
+    # Using ConstraintRequest where 'target_id' is the number of days
+    with Session(engine) as session:
+        existing = session.exec(select(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == req.employee_id)).first()
+        if existing:
+            existing.target_days = req.target_id
+            session.add(existing)
+        else:
+            session.add(EmployeeTargetDays(employee_id=req.employee_id, target_days=req.target_id))
         session.commit()
     return {"status": "ok"}
 
