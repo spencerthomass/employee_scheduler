@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 from typing import Optional
+from datetime import datetime
 import os
 
 # --- Database Configuration ---
@@ -48,11 +49,17 @@ class EmployeeUnavailableDay(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     day_of_week: int 
 
-# NEW: Target Days Per Week
 class EmployeeTargetDays(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     target_days: int
+
+# NEW: Week Status (For Publishing)
+class WeekStatus(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    week_start: str # YYYY-MM-DD of the Monday
+    is_published: bool = Field(default=False)
+    published_at: Optional[datetime] = Field(default=None)
 
 # --- Setup ---
 
