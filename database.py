@@ -27,23 +27,27 @@ class Shift(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     location_id: int = Field(foreign_key="location.id")
 
-# "Forbidden" Locations (Hard Constraint)
+# Constraints & Preferences
 class LocationConstraint(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     location_id: int = Field(foreign_key="location.id")
 
-# "Preferred" Locations (Soft Constraint) -- NEW
 class LocationPreference(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     location_id: int = Field(foreign_key="location.id")
 
-# Coworker Conflicts
 class EmployeeConstraint(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     target_employee_id: int = Field(foreign_key="employee.id")
+
+# NEW: Unavailable Days (0=Mon, 1=Tue ... 6=Sun)
+class EmployeeUnavailableDay(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    employee_id: int = Field(foreign_key="employee.id")
+    day_of_week: int 
 
 # --- Setup ---
 
