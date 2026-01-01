@@ -43,11 +43,16 @@ class EmployeeConstraint(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     target_employee_id: int = Field(foreign_key="employee.id")
 
-# NEW: Unavailable Days (0=Mon, 1=Tue ... 6=Sun)
 class EmployeeUnavailableDay(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     day_of_week: int 
+
+# NEW: Target Days Per Week
+class EmployeeTargetDays(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    employee_id: int = Field(foreign_key="employee.id")
+    target_days: int
 
 # --- Setup ---
 
