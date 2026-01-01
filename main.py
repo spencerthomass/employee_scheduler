@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, delete, or_
-from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint
+from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
@@ -35,21 +35,21 @@ class ConstraintRequest(BaseModel): employee_id: int; target_id: int
 def get_roster_state(start_date_str: str, request: Request):
     is_admin = request.cookies.get("admin_token") == SECRET_KEY
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-    # Mon-Sat (6 days)
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
-        # CHANGED: Added .order_by(Employee.name)
         employees = session.exec(select(Employee).where(Employee.active == True).order_by(Employee.name)).all()
-        # CHANGED: Added .order_by(Location.name)
         locations = session.exec(select(Location).order_by(Location.name)).all()
-        
         shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
         
+        # Fetch Constraints & Preferences
         loc_constraints = session.exec(select(LocationConstraint)).all()
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
+        loc_preferences = session.exec(select(LocationPreference)).all()
 
-        constraints = {e.id: {"bad_locs": [], "bad_coworkers": []} for e in employees}
+        # Build Constraints Map
+        # constraints[emp_id] = { bad_locs: [], bad_coworkers: [], preferred_locs: [] }
+        constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": []} for e in employees}
         
         for lc in loc_constraints:
             if lc.employee_id in constraints:
@@ -60,6 +60,10 @@ def get_roster_state(start_date_str: str, request: Request):
                 constraints[ec.employee_id]["bad_coworkers"].append(ec.target_employee_id)
             if ec.target_employee_id in constraints:
                 constraints[ec.target_employee_id]["bad_coworkers"].append(ec.employee_id)
+                
+        for lp in loc_preferences:
+            if lp.employee_id in constraints:
+                constraints[lp.employee_id]["preferred_locs"].append(lp.location_id)
 
         grid = {e.id: {d: None for d in week_dates} for e in employees}
         loc_map = {l.id: l for l in locations}
@@ -132,6 +136,7 @@ def delete_employee(id: int):
         session.exec(delete(Shift).where(Shift.employee_id == id))
         session.exec(delete(LocationConstraint).where(LocationConstraint.employee_id == id))
         session.exec(delete(EmployeeConstraint).where(or_(EmployeeConstraint.employee_id == id, EmployeeConstraint.target_employee_id == id)))
+        session.exec(delete(LocationPreference).where(LocationPreference.employee_id == id)) # Cleanup Prefs
         session.exec(delete(Employee).where(Employee.id == id))
         session.commit()
     return {"status": "ok"}
@@ -158,11 +163,12 @@ def delete_location(id: int):
     with Session(engine) as session:
         session.exec(delete(Shift).where(Shift.location_id == id))
         session.exec(delete(LocationConstraint).where(LocationConstraint.location_id == id))
+        session.exec(delete(LocationPreference).where(LocationPreference.location_id == id)) # Cleanup Prefs
         session.exec(delete(Location).where(Location.id == id))
         session.commit()
     return {"status": "ok"}
 
-# --- Constraint Routes ---
+# --- Constraint & Preference Routes ---
 
 @app.post("/api/constraints/location", dependencies=[Depends(get_current_admin)])
 def add_loc_constraint(req: ConstraintRequest):
@@ -195,6 +201,23 @@ def remove_emp_constraint(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeConstraint).where(EmployeeConstraint.employee_id==req.employee_id, EmployeeConstraint.target_employee_id==req.target_id))
         session.exec(delete(EmployeeConstraint).where(EmployeeConstraint.employee_id==req.target_id, EmployeeConstraint.target_employee_id==req.employee_id))
+        session.commit()
+    return {"status": "ok"}
+
+# NEW: Preference Routes
+@app.post("/api/preferences/location", dependencies=[Depends(get_current_admin)])
+def add_loc_preference(req: ConstraintRequest):
+    with Session(engine) as session:
+        exists = session.exec(select(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id)).first()
+        if not exists:
+            session.add(LocationPreference(employee_id=req.employee_id, location_id=req.target_id))
+            session.commit()
+    return {"status": "ok"}
+
+@app.delete("/api/preferences/location", dependencies=[Depends(get_current_admin)])
+def remove_loc_preference(req: ConstraintRequest):
+    with Session(engine) as session:
+        session.exec(delete(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id))
         session.commit()
     return {"status": "ok"}
 
