@@ -27,13 +27,19 @@ class Shift(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     location_id: int = Field(foreign_key="location.id")
 
-# NEW: Tracks locations an employee cannot/should not work at
+# "Forbidden" Locations (Hard Constraint)
 class LocationConstraint(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     location_id: int = Field(foreign_key="location.id")
 
-# NEW: Tracks incompatible employees (One-way reference for simplicity, checked both ways in logic)
+# "Preferred" Locations (Soft Constraint) -- NEW
+class LocationPreference(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    employee_id: int = Field(foreign_key="employee.id")
+    location_id: int = Field(foreign_key="location.id")
+
+# Coworker Conflicts
 class EmployeeConstraint(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
