@@ -44,6 +44,12 @@ class EmployeeConstraint(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     target_employee_id: int = Field(foreign_key="employee.id")
 
+# NEW: Preferred Coworkers
+class EmployeeCoworkerPreference(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    employee_id: int = Field(foreign_key="employee.id")
+    target_employee_id: int = Field(foreign_key="employee.id")
+
 class EmployeeUnavailableDay(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
@@ -54,10 +60,9 @@ class EmployeeTargetDays(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     target_days: int
 
-# NEW: Week Status (For Publishing)
 class WeekStatus(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    week_start: str # YYYY-MM-DD of the Monday
+    week_start: str 
     is_published: bool = Field(default=False)
     published_at: Optional[datetime] = Field(default=None)
 
