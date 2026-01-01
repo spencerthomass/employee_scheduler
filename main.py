@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, delete, or_
-from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays, WeekStatus
+from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays, WeekStatus, EmployeeCoworkerPreference
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
@@ -29,7 +29,7 @@ class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
 class PublishRequest(BaseModel): week_start: str
-class AutoFillRequest(BaseModel): week_start: str; mode: str # 'copy' or 'smart'
+class AutoFillRequest(BaseModel): week_start: str; mode: str
 
 # --- Public Routes ---
 
@@ -40,28 +40,27 @@ def get_roster_state(start_date_str: str, request: Request):
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
-        # Check Publish Status
         status_entry = session.exec(select(WeekStatus).where(WeekStatus.week_start == start_date_str)).first()
         is_published = status_entry.is_published if status_entry else False
         published_at = status_entry.published_at if status_entry else None
 
-        # Fetch Data
         employees = session.exec(select(Employee).where(Employee.active == True).order_by(Employee.name)).all()
         locations = session.exec(select(Location).order_by(Location.name)).all()
         
-        # LOGIC: Only fetch shifts if Admin OR Published
         shifts = []
         if is_admin or is_published:
             shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
         
-        # Constraints (Fetch all for simplicity, frontend handles matching)
+        # Fetch Constraints
         loc_constraints = session.exec(select(LocationConstraint)).all()
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
         loc_preferences = session.exec(select(LocationPreference)).all()
         day_constraints = session.exec(select(EmployeeUnavailableDay)).all()
         target_days = session.exec(select(EmployeeTargetDays)).all()
+        coworker_preferences = session.exec(select(EmployeeCoworkerPreference)).all()
 
-        constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "bad_days": [], "target_days": None} for e in employees}
+        # Build Map: constraints[emp_id] = { ... }
+        constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "preferred_coworkers": [], "bad_days": [], "target_days": None} for e in employees}
         
         for lc in loc_constraints:
             if lc.employee_id in constraints: constraints[lc.employee_id]["bad_locs"].append(lc.location_id)
@@ -74,6 +73,9 @@ def get_roster_state(start_date_str: str, request: Request):
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
         for td in target_days:
             if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = td.target_days
+        for cp in coworker_preferences:
+            if cp.employee_id in constraints: constraints[cp.employee_id]["preferred_coworkers"].append(cp.target_employee_id)
+            # Bi-directional preference assumption? Let's keep it uni-directional based on data, but usually 'preferred' works best if one sets it.
 
         grid = {e.id: {d: None for d in week_dates} for e in employees}
         loc_map = {l.id: l for l in locations}
@@ -130,7 +132,6 @@ def publish_week(req: PublishRequest):
         if not status_entry:
             status_entry = WeekStatus(week_start=req.week_start)
             session.add(status_entry)
-        
         status_entry.is_published = True
         status_entry.published_at = datetime.now()
         session.commit()
@@ -142,64 +143,44 @@ def autofill_schedule(req: AutoFillRequest):
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
-        # Clear existing shifts for this week first
         session.exec(delete(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1]))
         
         if req.mode == 'copy':
-            # Calculate last week's dates
             prev_start = (start_date - timedelta(days=7)).strftime("%Y-%m-%d")
-            prev_end = (start_date - timedelta(days=2)).strftime("%Y-%m-%d") # Mon-Sat of prev week
-            
+            prev_end = (start_date - timedelta(days=2)).strftime("%Y-%m-%d")
             old_shifts = session.exec(select(Shift).where(Shift.date_str >= prev_start, Shift.date_str <= prev_end)).all()
-            
             for old in old_shifts:
-                # Map old date to new date
-                old_date_obj = datetime.strptime(old.date_str, "%Y-%m-%d").date()
-                day_diff = (old_date_obj - (start_date - timedelta(days=7))).days
-                new_date_str = week_dates[day_diff]
-                
-                session.add(Shift(employee_id=old.employee_id, location_id=old.location_id, date_str=new_date_str))
+                day_diff = (datetime.strptime(old.date_str, "%Y-%m-%d").date() - (start_date - timedelta(days=7))).days
+                if 0 <= day_diff < 6:
+                    session.add(Shift(employee_id=old.employee_id, location_id=old.location_id, date_str=week_dates[day_diff]))
         
         elif req.mode == 'smart':
-            # Simple Smart Fill: Assign employees to Preferred Locations up to Target Days
+            # Basic smart fill (Location prefs + Target days)
             employees = session.exec(select(Employee).where(Employee.active==True)).all()
             prefs = session.exec(select(LocationPreference)).all()
             targets = session.exec(select(EmployeeTargetDays)).all()
             unavailable = session.exec(select(EmployeeUnavailableDay)).all()
             
-            # Map preferences
             pref_map = {e.id: [] for e in employees}
             for p in prefs: pref_map[p.employee_id].append(p.location_id)
-            
-            # Map targets
             target_map = {t.employee_id: t.target_days for t in targets}
-            
-            # Map unavailable days
             bad_days_map = {u.employee_id: [] for u in unavailable}
             for u in unavailable: bad_days_map[u.employee_id].append(u.day_of_week)
 
             for emp in employees:
                 target = target_map.get(emp.id, 0)
                 if target == 0 or not pref_map[emp.id]: continue
-                
                 days_assigned = 0
                 for day_idx, date_str in enumerate(week_dates):
                     if days_assigned >= target: break
-                    
-                    # Skip if unavailable day
                     if day_idx in bad_days_map.get(emp.id, []): continue
-                    
-                    # Assign to first preferred location (Simplistic greedy approach)
-                    # Ideally we check for conflicts, but basic logic is requested.
-                    loc_id = pref_map[emp.id][0]
-                    session.add(Shift(employee_id=emp.id, location_id=loc_id, date_str=date_str))
+                    session.add(Shift(employee_id=emp.id, location_id=pref_map[emp.id][0], date_str=date_str))
                     days_assigned += 1
 
         session.commit()
     return {"status": "ok"}
 
 # --- Management Routes ---
-# (Standard CRUD routes remain the same, abbreviated here for clarity but include them all in your file)
 @app.post("/api/employees", dependencies=[Depends(get_current_admin)])
 def add_employee(req: NameRequest):
     with Session(engine) as session: session.add(Employee(name=req.name)); session.commit()
@@ -217,6 +198,7 @@ def delete_employee(id: int):
         session.exec(delete(LocationConstraint).where(LocationConstraint.employee_id == id))
         session.exec(delete(EmployeeConstraint).where(or_(EmployeeConstraint.employee_id == id, EmployeeConstraint.target_employee_id == id)))
         session.exec(delete(LocationPreference).where(LocationPreference.employee_id == id))
+        session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id == id)) # Cleanup
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id == id))
         session.exec(delete(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == id))
         session.exec(delete(Employee).where(Employee.id == id))
@@ -241,6 +223,8 @@ def delete_location(id: int):
         session.exec(delete(Location).where(Location.id == id))
         session.commit()
     return {"status": "ok"}
+
+# --- Constraint Routes ---
 @app.post("/api/constraints/location", dependencies=[Depends(get_current_admin)])
 def add_loc_constraint(req: ConstraintRequest):
     with Session(engine) as session:
@@ -265,17 +249,6 @@ def remove_emp_constraint(req: ConstraintRequest):
         session.exec(delete(EmployeeConstraint).where(EmployeeConstraint.employee_id==req.target_id, EmployeeConstraint.target_employee_id==req.employee_id))
         session.commit()
     return {"status": "ok"}
-@app.post("/api/preferences/location", dependencies=[Depends(get_current_admin)])
-def add_loc_preference(req: ConstraintRequest):
-    with Session(engine) as session:
-        if not session.exec(select(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id)).first():
-            session.add(LocationPreference(employee_id=req.employee_id, location_id=req.target_id)); session.commit()
-    return {"status": "ok"}
-@app.delete("/api/preferences/location", dependencies=[Depends(get_current_admin)])
-def remove_loc_preference(req: ConstraintRequest):
-    with Session(engine) as session:
-        session.exec(delete(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id)); session.commit()
-    return {"status": "ok"}
 @app.post("/api/constraints/day", dependencies=[Depends(get_current_admin)])
 def add_day_constraint(req: ConstraintRequest):
     with Session(engine) as session:
@@ -294,6 +267,32 @@ def set_target_days(req: ConstraintRequest):
         if existing: existing.target_days = req.target_id; session.add(existing)
         else: session.add(EmployeeTargetDays(employee_id=req.employee_id, target_days=req.target_id))
         session.commit()
+    return {"status": "ok"}
+
+# --- Preference Routes ---
+@app.post("/api/preferences/location", dependencies=[Depends(get_current_admin)])
+def add_loc_preference(req: ConstraintRequest):
+    with Session(engine) as session:
+        if not session.exec(select(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id)).first():
+            session.add(LocationPreference(employee_id=req.employee_id, location_id=req.target_id)); session.commit()
+    return {"status": "ok"}
+@app.delete("/api/preferences/location", dependencies=[Depends(get_current_admin)])
+def remove_loc_preference(req: ConstraintRequest):
+    with Session(engine) as session:
+        session.exec(delete(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id)); session.commit()
+    return {"status": "ok"}
+
+# NEW: Coworker Preferences
+@app.post("/api/preferences/employee", dependencies=[Depends(get_current_admin)])
+def add_emp_preference(req: ConstraintRequest):
+    with Session(engine) as session:
+        if req.employee_id != req.target_id and not session.exec(select(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id==req.employee_id, EmployeeCoworkerPreference.target_employee_id==req.target_id)).first():
+            session.add(EmployeeCoworkerPreference(employee_id=req.employee_id, target_employee_id=req.target_id)); session.commit()
+    return {"status": "ok"}
+@app.delete("/api/preferences/employee", dependencies=[Depends(get_current_admin)])
+def remove_emp_preference(req: ConstraintRequest):
+    with Session(engine) as session:
+        session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id==req.employee_id, EmployeeCoworkerPreference.target_employee_id==req.target_id)); session.commit()
     return {"status": "ok"}
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
