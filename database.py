@@ -58,11 +58,12 @@ class EmployeeTargetDays(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     target_days: int
 
-# NEW: Target Staff Count per Location
+# NEW: Range-based Targets
 class LocationTarget(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     location_id: int = Field(foreign_key="location.id")
-    target_count: int
+    min_employees: int = Field(default=1)
+    max_employees: int = Field(default=1)
 
 class WeekStatus(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
