@@ -146,17 +146,21 @@
                     <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
                 
-                <div v-if="modalMode === 'shops'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
+                <div v-if="modalMode === 'shops'" class="bg-white p-6 rounded shadow-lg w-[500px] max-h-[80vh] flex flex-col">
                     <h3 class="text-lg font-bold mb-4">Manage Shops</h3>
                     <div class="flex mb-4"><input v-model="newItemName" placeholder="New Shop Name" class="border p-2 rounded-l flex-1"><button @click="createItem('locations')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button></div>
                     <div class="flex-1 overflow-y-auto border-t pt-2">
                         <div v-for="loc in locations" :key="loc.id" class="flex justify-between items-center py-2 border-b">
                             <span class="font-bold text-gray-700 w-32 truncate">{{ loc.name }}</span>
-                            <div class="flex items-center space-x-2">
+                            <div class="flex items-center space-x-1">
                                 <span class="text-xs text-gray-400">Target:</span>
-                                <input type="number" min="1" class="w-10 border rounded text-center text-xs p-1"
-                                       :value="locationTargets[loc.id] || 1"
-                                       @change="setLocTarget(loc.id, $event.target.value)">
+                                <input type="number" min="1" class="w-8 border rounded text-center text-xs p-1"
+                                       :value="locationTargets[loc.id]?.min || 1"
+                                       @change="setLocTarget(loc.id, $event.target.value, locationTargets[loc.id]?.max)">
+                                <span class="text-xs text-gray-400">-</span>
+                                <input type="number" min="1" class="w-8 border rounded text-center text-xs p-1"
+                                       :value="locationTargets[loc.id]?.max || 1"
+                                       @change="setLocTarget(loc.id, locationTargets[loc.id]?.min, $event.target.value)">
                             </div>
                             <div class="flex items-center space-x-1 ml-auto">
                                 <button @click="updateItem('locations', loc.id, loc.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
@@ -194,7 +198,7 @@
                 const grid = ref({}); const constraints = ref({});
                 const isAdmin = ref(false); const showCoverage = ref(false); 
                 const isPublished = ref(false); const publishedAt = ref(null);
-                const locationTargets = ref({}); // NEW: Stores target counts
+                const locationTargets = ref({});
                 
                 const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref("");
                 const selectedEmp = ref(null);
@@ -210,22 +214,26 @@
                     locationTargets.value = data.location_targets;
                 };
 
-                const setLocTarget = async (locId, val) => {
-                    const count = parseInt(val) || 1;
-                    locationTargets.value[locId] = count;
+                const setLocTarget = async (locId, minVal, maxVal) => {
+                    const min = parseInt(minVal) || 1;
+                    const max = parseInt(maxVal) || 1;
+                    // Update local state optimistically
+                    locationTargets.value[locId] = {min: min, max: max};
+                    
                     await fetch('/api/constraints/location_target', {
                         method: 'POST', headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ location_id: locId, target_count: count })
+                        body: JSON.stringify({ location_id: locId, min_employees: min, max_employees: max })
                     });
                 };
 
                 const getCoverageClass = (locId, date) => {
                     const count = getShopCount(locId, date);
-                    const target = locationTargets.value[locId] || 1;
+                    const target = locationTargets.value[locId] || {min: 1, max: 1};
+                    
                     if (count === 0) return 'bg-red-100 text-red-600 border-red-200'; // Critical
-                    if (count < target) return 'bg-orange-100 text-orange-600 border-orange-200'; // Under
-                    if (count === target) return 'bg-green-100 text-green-700 border-green-200'; // Perfect
-                    return 'bg-blue-50 text-blue-600 border-blue-200'; // Over
+                    if (count < target.min) return 'bg-orange-100 text-orange-600 border-orange-200'; // Under min
+                    if (count > target.max) return 'bg-blue-50 text-blue-600 border-blue-200'; // Over max
+                    return 'bg-green-100 text-green-700 border-green-200'; // In range
                 };
 
                 const publishSchedule = async () => {
