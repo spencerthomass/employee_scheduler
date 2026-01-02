@@ -28,7 +28,6 @@ class Shift(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     location_id: int = Field(foreign_key="location.id")
 
-# Constraints & Preferences
 class LocationConstraint(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
@@ -44,7 +43,6 @@ class EmployeeConstraint(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     target_employee_id: int = Field(foreign_key="employee.id")
 
-# NEW: Preferred Coworkers
 class EmployeeCoworkerPreference(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
@@ -59,6 +57,12 @@ class EmployeeTargetDays(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     target_days: int
+
+# NEW: Target Staff Count per Location
+class LocationTarget(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    location_id: int = Field(foreign_key="location.id")
+    target_count: int
 
 class WeekStatus(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
