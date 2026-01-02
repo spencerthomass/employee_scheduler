@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, delete, or_
-from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays, WeekStatus, EmployeeCoworkerPreference
+from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays, WeekStatus, EmployeeCoworkerPreference, LocationTarget
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
@@ -28,6 +28,7 @@ class MoveRequest(BaseModel): employee_id: int; date_str: str; location_id: int
 class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
+class LocationTargetRequest(BaseModel): location_id: int; target_count: int
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
 
@@ -58,8 +59,11 @@ def get_roster_state(start_date_str: str, request: Request):
         day_constraints = session.exec(select(EmployeeUnavailableDay)).all()
         target_days = session.exec(select(EmployeeTargetDays)).all()
         coworker_preferences = session.exec(select(EmployeeCoworkerPreference)).all()
+        
+        # NEW: Fetch Location Targets
+        location_targets_db = session.exec(select(LocationTarget)).all()
+        location_targets = {lt.location_id: lt.target_count for lt in location_targets_db}
 
-        # Build Map: constraints[emp_id] = { ... }
         constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "preferred_coworkers": [], "bad_days": [], "target_days": None} for e in employees}
         
         for lc in loc_constraints:
@@ -75,7 +79,6 @@ def get_roster_state(start_date_str: str, request: Request):
             if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = td.target_days
         for cp in coworker_preferences:
             if cp.employee_id in constraints: constraints[cp.employee_id]["preferred_coworkers"].append(cp.target_employee_id)
-            # Bi-directional preference assumption? Let's keep it uni-directional based on data, but usually 'preferred' works best if one sets it.
 
         grid = {e.id: {d: None for d in week_dates} for e in employees}
         loc_map = {l.id: l for l in locations}
@@ -88,6 +91,7 @@ def get_roster_state(start_date_str: str, request: Request):
             "week_dates": week_dates,
             "employees": employees,
             "locations": locations,
+            "location_targets": location_targets, # Send to frontend
             "grid": grid,
             "constraints": constraints,
             "is_admin": is_admin,
@@ -155,7 +159,6 @@ def autofill_schedule(req: AutoFillRequest):
                     session.add(Shift(employee_id=old.employee_id, location_id=old.location_id, date_str=week_dates[day_diff]))
         
         elif req.mode == 'smart':
-            # Basic smart fill (Location prefs + Target days)
             employees = session.exec(select(Employee).where(Employee.active==True)).all()
             prefs = session.exec(select(LocationPreference)).all()
             targets = session.exec(select(EmployeeTargetDays)).all()
@@ -198,7 +201,7 @@ def delete_employee(id: int):
         session.exec(delete(LocationConstraint).where(LocationConstraint.employee_id == id))
         session.exec(delete(EmployeeConstraint).where(or_(EmployeeConstraint.employee_id == id, EmployeeConstraint.target_employee_id == id)))
         session.exec(delete(LocationPreference).where(LocationPreference.employee_id == id))
-        session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id == id)) # Cleanup
+        session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id == id)) 
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id == id))
         session.exec(delete(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == id))
         session.exec(delete(Employee).where(Employee.id == id))
@@ -220,6 +223,7 @@ def delete_location(id: int):
         session.exec(delete(Shift).where(Shift.location_id == id))
         session.exec(delete(LocationConstraint).where(LocationConstraint.location_id == id))
         session.exec(delete(LocationPreference).where(LocationPreference.location_id == id))
+        session.exec(delete(LocationTarget).where(LocationTarget.location_id == id)) # Cleanup
         session.exec(delete(Location).where(Location.id == id))
         session.commit()
     return {"status": "ok"}
@@ -281,8 +285,6 @@ def remove_loc_preference(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(LocationPreference).where(LocationPreference.employee_id==req.employee_id, LocationPreference.location_id==req.target_id)); session.commit()
     return {"status": "ok"}
-
-# NEW: Coworker Preferences
 @app.post("/api/preferences/employee", dependencies=[Depends(get_current_admin)])
 def add_emp_preference(req: ConstraintRequest):
     with Session(engine) as session:
@@ -293,6 +295,16 @@ def add_emp_preference(req: ConstraintRequest):
 def remove_emp_preference(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id==req.employee_id, EmployeeCoworkerPreference.target_employee_id==req.target_id)); session.commit()
+    return {"status": "ok"}
+
+# NEW: Location Target Route
+@app.post("/api/constraints/location_target", dependencies=[Depends(get_current_admin)])
+def set_location_target(req: LocationTargetRequest):
+    with Session(engine) as session:
+        existing = session.exec(select(LocationTarget).where(LocationTarget.location_id == req.location_id)).first()
+        if existing: existing.target_count = req.target_count; session.add(existing)
+        else: session.add(LocationTarget(location_id=req.location_id, target_count=req.target_count))
+        session.commit()
     return {"status": "ok"}
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
