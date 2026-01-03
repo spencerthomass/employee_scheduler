@@ -1,9 +1,0 @@
-services:
-  scheduler:
-    build: .
-    container_name: shop_scheduler
-    ports:
-      - "8080:8000"  # Opens on port 8080 on your server
-    volumes:
-      - ./data:/app/data  # OPTIONAL: Map this if you want to store the DB outside
-    restart: unless-stopped
