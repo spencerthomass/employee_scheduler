@@ -28,7 +28,6 @@ class MoveRequest(BaseModel): employee_id: int; date_str: str; location_id: int
 class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
-# UPDATED: Request model now takes min/max
 class LocationTargetRequest(BaseModel): location_id: int; min_employees: int; max_employees: int
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
@@ -53,7 +52,6 @@ def get_roster_state(start_date_str: str, request: Request):
         if is_admin or is_published:
             shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
         
-        # Constraints
         loc_constraints = session.exec(select(LocationConstraint)).all()
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
         loc_preferences = session.exec(select(LocationPreference)).all()
@@ -61,7 +59,6 @@ def get_roster_state(start_date_str: str, request: Request):
         target_days = session.exec(select(EmployeeTargetDays)).all()
         coworker_preferences = session.exec(select(EmployeeCoworkerPreference)).all()
         
-        # NEW: Return min/max dict
         location_targets_db = session.exec(select(LocationTarget)).all()
         location_targets = {lt.location_id: {"min": lt.min_employees, "max": lt.max_employees} for lt in location_targets_db}
 
@@ -111,8 +108,6 @@ def login(req: LoginRequest, response: Response):
 def logout(response: Response):
     response.delete_cookie("admin_token")
     return {"status": "ok"}
-
-# --- Protected Routes ---
 
 @app.post("/api/assign", dependencies=[Depends(get_current_admin)])
 def assign_shift(req: MoveRequest):
@@ -184,7 +179,6 @@ def autofill_schedule(req: AutoFillRequest):
         session.commit()
     return {"status": "ok"}
 
-# --- Management Routes ---
 @app.post("/api/employees", dependencies=[Depends(get_current_admin)])
 def add_employee(req: NameRequest):
     with Session(engine) as session: session.add(Employee(name=req.name)); session.commit()
@@ -228,8 +222,6 @@ def delete_location(id: int):
         session.exec(delete(Location).where(Location.id == id))
         session.commit()
     return {"status": "ok"}
-
-# --- Constraint Routes ---
 @app.post("/api/constraints/location", dependencies=[Depends(get_current_admin)])
 def add_loc_constraint(req: ConstraintRequest):
     with Session(engine) as session:
@@ -273,8 +265,6 @@ def set_target_days(req: ConstraintRequest):
         else: session.add(EmployeeTargetDays(employee_id=req.employee_id, target_days=req.target_id))
         session.commit()
     return {"status": "ok"}
-
-# --- Preference Routes ---
 @app.post("/api/preferences/location", dependencies=[Depends(get_current_admin)])
 def add_loc_preference(req: ConstraintRequest):
     with Session(engine) as session:
@@ -297,18 +287,12 @@ def remove_emp_preference(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id==req.employee_id, EmployeeCoworkerPreference.target_employee_id==req.target_id)); session.commit()
     return {"status": "ok"}
-
-# NEW: UPDATED Location Target Route (Min/Max)
 @app.post("/api/constraints/location_target", dependencies=[Depends(get_current_admin)])
 def set_location_target(req: LocationTargetRequest):
     with Session(engine) as session:
         existing = session.exec(select(LocationTarget).where(LocationTarget.location_id == req.location_id)).first()
-        if existing: 
-            existing.min_employees = req.min_employees
-            existing.max_employees = req.max_employees
-            session.add(existing)
-        else: 
-            session.add(LocationTarget(location_id=req.location_id, min_employees=req.min_employees, max_employees=req.max_employees))
+        if existing: existing.min_employees = req.min_employees; existing.max_employees = req.max_employees; session.add(existing)
+        else: session.add(LocationTarget(location_id=req.location_id, min_employees=req.min_employees, max_employees=req.max_employees))
         session.commit()
     return {"status": "ok"}
 
