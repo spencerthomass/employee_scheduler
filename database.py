@@ -5,17 +5,13 @@ import os
 
 # --- Database Configuration ---
 
-# Get credentials from Environment Variables
 db_user = os.getenv("DB_USER", "root")
 db_password = os.getenv("DB_PASSWORD", "password")
 db_host = os.getenv("DB_HOST", "192.168.1.27")
 db_port = os.getenv("DB_PORT", "3306")
 db_name = os.getenv("DB_NAME", "scheduler")
 
-# Connection URL for MySQL/MariaDB
 database_url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-
-# Create engine with pool recycling to prevent timeouts
 engine = create_engine(database_url, pool_recycle=3600)
 
 # --- Models ---
@@ -60,11 +56,13 @@ class EmployeeUnavailableDay(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     day_of_week: int 
 
+# REVERTED: Back to single integer target
 class EmployeeTargetDays(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
     target_days: int
 
+# Location Targets remain as Min/Max Ranges
 class LocationTarget(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     location_id: int = Field(foreign_key="location.id")
@@ -80,7 +78,6 @@ class WeekStatus(SQLModel, table=True):
 # --- Setup ---
 
 def create_db_and_tables():
-    # This creates the tables if they don't exist in your SQL DB
     SQLModel.metadata.create_all(engine)
 
 def seed_data():
