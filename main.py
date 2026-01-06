@@ -30,11 +30,12 @@ class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
 class LocationTargetRequest(BaseModel): location_id: int; min_employees: int; max_employees: int
-# UPDATED: Request model for Min/Max
 class EmployeeTargetDaysRequest(BaseModel): employee_id: int; min_days: int; max_days: int
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
 class ExportRequest(BaseModel): tables: list[str]
+# NEW: Clear Week Request
+class ClearWeekRequest(BaseModel): week_start: str
 
 TABLE_MAP = {
     "employees": Employee, "locations": Location, "shifts": Shift,
@@ -95,7 +96,6 @@ def get_roster_state(start_date_str: str, request: Request):
         if is_admin or is_published:
             shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
         
-        # Constraints
         loc_constraints = session.exec(select(LocationConstraint)).all()
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
         loc_preferences = session.exec(select(LocationPreference)).all()
@@ -117,7 +117,6 @@ def get_roster_state(start_date_str: str, request: Request):
             if lp.employee_id in constraints: constraints[lp.employee_id]["preferred_locs"].append(lp.location_id)
         for dc in day_constraints:
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
-        # UPDATED: Mapping for min/max
         for td in target_days:
             if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = {"min": td.min_days, "max": td.max_days}
         for cp in coworker_preferences:
@@ -209,7 +208,6 @@ def autofill_schedule(req: AutoFillRequest):
             
             pref_map = {e.id: [] for e in employees}
             for p in prefs: pref_map[p.employee_id].append(p.location_id)
-            # UPDATED Smart Fill: Use min_days as target
             target_map = {t.employee_id: t.min_days for t in targets}
             bad_days_map = {u.employee_id: [] for u in unavailable}
             for u in unavailable: bad_days_map[u.employee_id].append(u.day_of_week)
@@ -224,6 +222,17 @@ def autofill_schedule(req: AutoFillRequest):
                     session.add(Shift(employee_id=emp.id, location_id=pref_map[emp.id][0], date_str=date_str))
                     days_assigned += 1
 
+        session.commit()
+    return {"status": "ok"}
+
+# NEW: Clear Week Route
+@app.post("/api/clear_week", dependencies=[Depends(get_current_admin)])
+def clear_week_schedule(req: ClearWeekRequest):
+    start_date = datetime.strptime(req.week_start, "%Y-%m-%d").date()
+    week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
+    
+    with Session(engine) as session:
+        session.exec(delete(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1]))
         session.commit()
     return {"status": "ok"}
 
@@ -308,18 +317,12 @@ def remove_day_constraint(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id==req.employee_id, EmployeeUnavailableDay.day_of_week==req.target_id)); session.commit()
     return {"status": "ok"}
-
-# UPDATED: Min/Max Employee Target Route
 @app.post("/api/constraints/target_days", dependencies=[Depends(get_current_admin)])
 def set_target_days(req: EmployeeTargetDaysRequest):
     with Session(engine) as session:
         existing = session.exec(select(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == req.employee_id)).first()
-        if existing: 
-            existing.min_days = req.min_days
-            existing.max_days = req.max_days
-            session.add(existing)
-        else: 
-            session.add(EmployeeTargetDays(employee_id=req.employee_id, min_days=req.min_days, max_days=req.max_days))
+        if existing: existing.min_days = req.min_days; existing.max_days = req.max_days; session.add(existing)
+        else: session.add(EmployeeTargetDays(employee_id=req.employee_id, min_days=req.min_days, max_days=req.max_days))
         session.commit()
     return {"status": "ok"}
 
