@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
 import json
-import random # <--- ADDED THIS
+import random
 
 app = FastAPI()
 
@@ -117,6 +117,7 @@ def get_roster_state(start_date_str: str, request: Request):
             if lp.employee_id in constraints: constraints[lp.employee_id]["preferred_locs"].append(lp.location_id)
         for dc in day_constraints:
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
+        
         for td in target_days:
             if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = {"min": td.min_days, "max": td.max_days}
         for cp in coworker_preferences:
@@ -189,6 +190,7 @@ def autofill_schedule(req: AutoFillRequest):
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
+        # Clear existing
         session.exec(delete(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1]))
         
         if req.mode == 'copy':
@@ -201,40 +203,127 @@ def autofill_schedule(req: AutoFillRequest):
                     session.add(Shift(employee_id=old.employee_id, location_id=old.location_id, date_str=week_dates[day_diff]))
         
         elif req.mode == 'smart':
+            # --- FETCH ALL DATA ---
             employees = session.exec(select(Employee).where(Employee.active==True)).all()
-            prefs = session.exec(select(LocationPreference)).all()
-            targets = session.exec(select(EmployeeTargetDays)).all()
-            unavailable = session.exec(select(EmployeeUnavailableDay)).all()
+            locations = session.exec(select(Location)).all()
             
+            # Constraint Lookups
+            prefs_db = session.exec(select(LocationPreference)).all()
+            targets_db = session.exec(select(EmployeeTargetDays)).all()
+            unavailable_db = session.exec(select(EmployeeUnavailableDay)).all()
+            bad_locs_db = session.exec(select(LocationConstraint)).all()
+            loc_targets_db = session.exec(select(LocationTarget)).all()
+
+            # Mappings for O(1) access
             pref_map = {e.id: [] for e in employees}
-            for p in prefs: pref_map[p.employee_id].append(p.location_id)
+            for p in prefs_db: pref_map[p.employee_id].append(p.location_id)
             
-            # Min/Max targets
-            target_map = {t.employee_id: t.max_days for t in targets} # Aim for MAX initially
-            bad_days_map = {u.employee_id: [] for u in unavailable}
-            for u in unavailable: bad_days_map[u.employee_id].append(u.day_of_week)
+            # Default target: 5 days max, 0 min
+            emp_targets = {e.id: {"min": 0, "max": 5} for e in employees}
+            for t in targets_db: emp_targets[t.employee_id] = {"min": t.min_days, "max": t.max_days}
+            
+            bad_days = {e.id: [] for e in employees}
+            for u in unavailable_db: bad_days[u.employee_id].append(u.day_of_week)
+            
+            bad_locs = {e.id: [] for e in employees}
+            for bl in bad_locs_db: bad_locs[bl.employee_id].append(bl.location_id)
+            
+            loc_min_max = {l.id: {"min": 1, "max": 1} for l in locations}
+            for lt in loc_targets_db: loc_min_max[lt.location_id] = {"min": lt.min_employees, "max": lt.max_employees}
 
-            # Create a list of day indices [0, 1, 2, 3, 4, 5]
+            # Tracking State
+            emp_days_assigned = {e.id: 0 for e in employees}
+            # key: f"{loc_id}_{date_str}", val: count
+            loc_day_counts = {} 
+            # key: f"{emp_id}_{date_str}", val: bool
+            emp_working_today = {}
+
+            def is_available(emp_id, date_str, day_idx, loc_id):
+                # Hard Constraints
+                if emp_days_assigned[emp_id] >= emp_targets[emp_id]["max"]: return False
+                if day_idx in bad_days[emp_id]: return False
+                if loc_id in bad_locs[emp_id]: return False
+                if emp_working_today.get(f"{emp_id}_{date_str}", False): return False
+                return True
+
+            def assign(emp_id, loc_id, date_str):
+                session.add(Shift(employee_id=emp_id, location_id=loc_id, date_str=date_str))
+                emp_days_assigned[emp_id] += 1
+                key = f"{loc_id}_{date_str}"
+                loc_day_counts[key] = loc_day_counts.get(key, 0) + 1
+                emp_working_today[f"{emp_id}_{date_str}"] = True
+
+            # --- PHASE 1: Coverage (Ensure Shops Meet Minimums) ---
+            # Randomize list of days to ensure Saturday coverage gets looked at
             day_indices = list(range(6))
+            random.shuffle(day_indices)
 
-            for emp in employees:
-                target = target_map.get(emp.id, 5) # Default to 5 if no max set
-                if target == 0 or not pref_map[emp.id]: continue
+            for i in day_indices:
+                date_str = week_dates[i]
                 
-                # SHUFFLE the days for this employee to prevent "Monday Bias"
-                # This ensures Saturday gets picked roughly 1/6th of the time first
-                random.shuffle(day_indices)
+                # Shuffle locations to prevent bias
+                shuffled_locs = list(locations)
+                random.shuffle(shuffled_locs)
+
+                for loc in shuffled_locs:
+                    min_req = loc_min_max[loc.id]["min"]
+                    current = loc_day_counts.get(f"{loc.id}_{date_str}", 0)
+                    
+                    while current < min_req:
+                        # Find candidates
+                        candidates = []
+                        for emp in employees:
+                            if is_available(emp.id, date_str, i, loc.id):
+                                score = 0
+                                # Prefer people who like this location
+                                if loc.id in pref_map[emp.id]: score += 10
+                                # Prefer people who haven't met min days yet
+                                if emp_days_assigned[emp.id] < emp_targets[emp.id]["min"]: score += 5
+                                # Slight random factor to break ties
+                                score += random.random()
+                                candidates.append((score, emp))
+                        
+                        if not candidates:
+                            break # No one available for this slot, skip
+                        
+                        # Pick best
+                        candidates.sort(key=lambda x: x[0], reverse=True)
+                        best_emp = candidates[0][1]
+                        assign(best_emp.id, loc.id, date_str)
+                        current += 1
+
+            # --- PHASE 2: Hours (Ensure Employees Meet Minimums) ---
+            # Iterate employees who need days
+            needy_employees = [e for e in employees if emp_days_assigned[e.id] < emp_targets[e.id]["min"]]
+            random.shuffle(needy_employees)
+
+            for emp in needy_employees:
+                needed = emp_targets[emp.id]["min"] - emp_days_assigned[emp.id]
                 
-                days_assigned = 0
+                # Check each day to find a spot
                 for i in day_indices:
-                    if days_assigned >= target: break
-                    
-                    # Check unavailable day
-                    if i in bad_days_map.get(emp.id, []): continue
-                    
+                    if needed <= 0: break
                     date_str = week_dates[i]
-                    session.add(Shift(employee_id=emp.id, location_id=pref_map[emp.id][0], date_str=date_str))
-                    days_assigned += 1
+                    
+                    if emp_working_today.get(f"{emp.id}_{date_str}", False): continue
+                    if i in bad_days[emp.id]: continue
+
+                    # Find a shop that isn't over capacity
+                    possible_locs = []
+                    for loc in locations:
+                        current = loc_day_counts.get(f"{loc.id}_{date_str}", 0)
+                        max_allowed = loc_min_max[loc.id]["max"]
+                        
+                        if current < max_allowed and loc.id not in bad_locs[emp.id]:
+                            score = 0
+                            if loc.id in pref_map[emp.id]: score += 5
+                            possible_locs.append((score, loc))
+                    
+                    if possible_locs:
+                        possible_locs.sort(key=lambda x: x[0], reverse=True)
+                        target_loc = possible_locs[0][1]
+                        assign(emp.id, target_loc.id, date_str)
+                        needed -= 1
 
         session.commit()
     return {"status": "ok"}
