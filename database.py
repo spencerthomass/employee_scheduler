@@ -56,13 +56,13 @@ class EmployeeUnavailableDay(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     day_of_week: int 
 
-# REVERTED: Back to single integer target
+# UPDATED: Range-based Targets for Employees
 class EmployeeTargetDays(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
-    target_days: int
+    min_days: int = Field(default=0)
+    max_days: int = Field(default=7)
 
-# Location Targets remain as Min/Max Ranges
 class LocationTarget(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     location_id: int = Field(foreign_key="location.id")
