@@ -175,8 +175,27 @@
 
                 <div v-if="modalMode === 'staff'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
                     <h3 class="text-lg font-bold mb-4">Manage Employees</h3>
-                    <div class="flex mb-4"><input v-model="newItemName" placeholder="New Employee Name" class="border p-2 rounded-l flex-1"><button @click="createItem('employees')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button></div>
-                    <div class="flex-1 overflow-y-auto border-t pt-2"><div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b"><span class="font-bold text-gray-700 truncate w-32">{{ emp.name }}</span><div class="flex items-center space-x-1"><button @click="openConstraints(emp)" class="text-gray-500 hover:text-gray-800 text-xs font-bold border border-gray-200 px-2 py-1 rounded">Rules</button><button @click="updateItem('employees', emp.id, emp.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button><button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button></div></div></div>
+                    <div class="flex mb-4 gap-2">
+                        <input v-model="newItemName" placeholder="New Employee Name" class="border p-2 rounded flex-1">
+                        <select v-model="newItemPriority" class="border p-2 rounded w-16">
+                            <option :value="1">P1</option><option :value="2">P2</option><option :value="3">P3</option><option :value="4">P4</option>
+                        </select>
+                        <button @click="createItem('employees')" class="bg-green-600 text-white px-3 rounded font-bold">+</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto border-t pt-2">
+                        <div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b">
+                            <div class="flex items-center">
+                                <div :class="{'bg-red-100 text-red-700': emp.priority==1, 'bg-orange-100 text-orange-700': emp.priority==2, 'bg-blue-100 text-blue-700': emp.priority==3, 'bg-gray-100 text-gray-600': emp.priority==4}" 
+                                     class="text-[10px] font-bold px-1.5 py-0.5 rounded mr-2">P{{ emp.priority }}</div>
+                                <span class="font-bold text-gray-700 truncate w-24">{{ emp.name }}</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <button @click="openConstraints(emp)" class="text-gray-500 hover:text-gray-800 text-xs font-bold border border-gray-200 px-2 py-1 rounded">Rules</button>
+                                <button @click="updateItem('employees', emp.id, emp.name, emp.priority)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
+                                <button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button>
+                            </div>
+                        </div>
+                    </div>
                     <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
                 
@@ -241,7 +260,7 @@
                 const isPublished = ref(false); const publishedAt = ref(null);
                 const locationTargets = ref({});
                 
-                const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref("");
+                const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref(""); const newItemPriority = ref(4);
                 const selectedEmp = ref(null);
                 
                 // BACKUP VARS
@@ -328,7 +347,6 @@
                     return null;
                 };
 
-                // UPDATED: Min/Max logic
                 const totalClass = (empId) => {
                     const count = countDays(empId); const target = constraints.value[empId]?.target_days;
                     if (!target) return 'text-gray-500'; 
@@ -340,15 +358,7 @@
 
                 const openConstraints = (emp) => { selectedEmp.value = emp; modalMode.value = 'constraints'; };
                 const formatTime = (iso) => iso ? new Date(iso).toLocaleString() : '';
-                
-                // UPDATED: Save min/max range
-                const setTargetDays = async (minVal, maxVal) => {
-                    const empId = selectedEmp.value.id; 
-                    const min = parseInt(minVal) || 0; const max = parseInt(maxVal) || 7;
-                    constraints.value[empId].target_days = {min, max}; 
-                    await fetch('/api/constraints/target_days', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, min_days: min, max_days: max }) }); 
-                };
-
+                const setTargetDays = async (minVal, maxVal) => { const empId = selectedEmp.value.id; const min = parseInt(minVal) || 0; const max = parseInt(maxVal) || 7; constraints.value[empId].target_days = {min, max}; await fetch('/api/constraints/target_days', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, min_days: min, max_days: max }) }); };
                 const toggleConstraint = async (type, targetId, evt) => {
                     const empId = selectedEmp.value.id; const isAdd = evt.target.checked; const method = isAdd ? 'POST' : 'DELETE'; 
                     let apiPath = type; let list = [];
@@ -365,8 +375,24 @@
                 const login = async () => { const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: passwordInput.value }) }); if (res.ok) { modalMode.value = null; passwordInput.value = ""; fetchData(); } else alert("Incorrect Password"); };
                 const logout = async () => { await fetch('/api/logout', { method: 'POST' }); fetchData(); };
                 const changeWeek = (days) => { const d = new Date(currentMonday.value + 'T00:00:00'); d.setDate(d.getDate() + days); currentMonday.value = toIsoDate(d); fetchData(); };
-                const createItem = async (type) => { if(!newItemName.value) return; await fetch(`/api/${type}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newItemName.value }) }); newItemName.value = ""; fetchData(); };
-                const updateItem = async (type, id, oldName) => { const newName = prompt("Rename:", oldName); if (!newName || newName === oldName) return; await fetch(`/api/${type}/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: newName }) }); fetchData(); };
+                
+                // CRUD
+                const createItem = async (type) => { if(!newItemName.value) return; 
+                    const body = { name: newItemName.value }; 
+                    if(type==='employees') body.priority = parseInt(newItemPriority.value);
+                    await fetch(`/api/${type}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }); 
+                    newItemName.value = ""; fetchData(); 
+                };
+                const updateItem = async (type, id, oldName, oldPrio) => { 
+                    const newName = prompt("Rename:", oldName); if (!newName) return; 
+                    let body = { name: newName };
+                    if(type==='employees') {
+                        const newP = prompt("Priority (1-4):", oldPrio);
+                        body.priority = parseInt(newP) || 4;
+                    }
+                    await fetch(`/api/${type}/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }); 
+                    fetchData(); 
+                };
                 const deleteItem = async (type, id) => { if(!confirm("Are you sure?")) return; await fetch(`/api/${type}/${id}`, { method: 'DELETE' }); fetchData(); };
                 
                 const onDragStart = (evt, locId) => { evt.dataTransfer.effectAllowed = 'copy'; evt.dataTransfer.setData('locId', locId); };
@@ -386,7 +412,7 @@
                 
                 return { 
                     currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage, constraints, isPublished, publishedAt, locationTargets,
-                    modalMode, passwordInput, newItemName, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
+                    modalMode, passwordInput, newItemName, newItemPriority, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
                     fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem, publishSchedule, runAutoFill, clearSchedule, setLocTarget, getCoverageClass,
                     onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime,
                     // Backup
