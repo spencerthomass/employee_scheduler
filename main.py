@@ -28,7 +28,8 @@ def get_current_admin(request: Request):
 class LoginRequest(BaseModel): password: str
 class MoveRequest(BaseModel): employee_id: int; date_str: str; location_id: int
 class DeleteRequest(BaseModel): employee_id: int; date_str: str
-class NameRequest(BaseModel): name: str
+# UPDATED: NameRequest now accepts optional priority for updates
+class NameRequest(BaseModel): name: str; priority: int = 4
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
 class LocationTargetRequest(BaseModel): location_id: int; min_employees: int; max_employees: int
 class EmployeeTargetDaysRequest(BaseModel): employee_id: int; min_days: int; max_days: int
@@ -89,6 +90,7 @@ def get_roster_state(start_date_str: str, request: Request):
         is_published = status_entry.is_published if status_entry else False
         published_at = status_entry.published_at if status_entry else None
 
+        # Sort employees by Name (Priority is handled in auto-fill logic, display is usually A-Z)
         employees = session.exec(select(Employee).where(Employee.active == True).order_by(Employee.name)).all()
         locations = session.exec(select(Location).order_by(Location.name)).all()
         
@@ -117,7 +119,6 @@ def get_roster_state(start_date_str: str, request: Request):
             if lp.employee_id in constraints: constraints[lp.employee_id]["preferred_locs"].append(lp.location_id)
         for dc in day_constraints:
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
-        
         for td in target_days:
             if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = {"min": td.min_days, "max": td.max_days}
         for cp in coworker_preferences:
@@ -190,7 +191,6 @@ def autofill_schedule(req: AutoFillRequest):
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
     
     with Session(engine) as session:
-        # Clear existing
         session.exec(delete(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1]))
         
         if req.mode == 'copy':
@@ -203,18 +203,17 @@ def autofill_schedule(req: AutoFillRequest):
                     session.add(Shift(employee_id=old.employee_id, location_id=old.location_id, date_str=week_dates[day_diff]))
         
         elif req.mode == 'smart':
-            # --- FETCH ALL DATA ---
+            # 1. Fetch Data
             employees = session.exec(select(Employee).where(Employee.active==True)).all()
             locations = session.exec(select(Location)).all()
             
-            # Constraint Lookups
             prefs_db = session.exec(select(LocationPreference)).all()
             targets_db = session.exec(select(EmployeeTargetDays)).all()
             unavailable_db = session.exec(select(EmployeeUnavailableDay)).all()
             bad_locs_db = session.exec(select(LocationConstraint)).all()
             loc_targets_db = session.exec(select(LocationTarget)).all()
 
-            # Mappings for O(1) access
+            # 2. Build Mappings
             pref_map = {e.id: [] for e in employees}
             for p in prefs_db: pref_map[p.employee_id].append(p.location_id)
             
@@ -231,15 +230,12 @@ def autofill_schedule(req: AutoFillRequest):
             loc_min_max = {l.id: {"min": 1, "max": 1} for l in locations}
             for lt in loc_targets_db: loc_min_max[lt.location_id] = {"min": lt.min_employees, "max": lt.max_employees}
 
-            # Tracking State
+            # 3. State Tracking
             emp_days_assigned = {e.id: 0 for e in employees}
-            # key: f"{loc_id}_{date_str}", val: count
-            loc_day_counts = {} 
-            # key: f"{emp_id}_{date_str}", val: bool
-            emp_working_today = {}
+            loc_day_counts = {} # key: f"{loc_id}_{date_str}", val: count
+            emp_working_today = {} # key: f"{emp_id}_{date_str}", val: bool
 
             def is_available(emp_id, date_str, day_idx, loc_id):
-                # Hard Constraints
                 if emp_days_assigned[emp_id] >= emp_targets[emp_id]["max"]: return False
                 if day_idx in bad_days[emp_id]: return False
                 if loc_id in bad_locs[emp_id]: return False
@@ -253,77 +249,100 @@ def autofill_schedule(req: AutoFillRequest):
                 loc_day_counts[key] = loc_day_counts.get(key, 0) + 1
                 emp_working_today[f"{emp_id}_{date_str}"] = True
 
-            # --- PHASE 1: Coverage (Ensure Shops Meet Minimums) ---
-            # Randomize list of days to ensure Saturday coverage gets looked at
+            # --- SORT EMPLOYEES BY PRIORITY ---
+            # 1 = Highest, 4 = Lowest.
+            # We process Phase 1 (VIP) for Priority 1, then 2, etc.
+            
+            employees.sort(key=lambda x: x.priority) # Ascending sort (1, 2, 3, 4)
+
+            # --- PHASE 1: VIP Preferences (Priority Based) ---
+            # Try to give high priority staff their preferred locations first
+            
+            # Create a randomized list of day indices to prevent Monday bias
             day_indices = list(range(6))
             random.shuffle(day_indices)
 
+            for emp in employees:
+                # If they have no prefs, skip to coverage phase
+                if not pref_map[emp.id]: continue
+                
+                # How many days do we strive for? Max days for high priority
+                days_wanted = emp_targets[emp.id]["max"]
+                
+                for i in day_indices:
+                    if emp_days_assigned[emp.id] >= days_wanted: break
+                    
+                    date_str = week_dates[i]
+                    
+                    # Try preferred locations in order
+                    for ploc_id in pref_map[emp.id]:
+                        # Check availability & Shop Capacity
+                        max_allowed = loc_min_max[ploc_id]["max"]
+                        current_staff = loc_day_counts.get(f"{ploc_id}_{date_str}", 0)
+                        
+                        if current_staff < max_allowed and is_available(emp.id, date_str, i, ploc_id):
+                            assign(emp.id, ploc_id, date_str)
+                            break # Assigned for this day, move to next day
+
+            # --- PHASE 2: Coverage (Fill Shop Holes) ---
+            # Now we look at shops that are empty/understaffed and fill them with WHOEVER is available
+            # Prioritizing: High Priority > Preferred > Random
+            
             for i in day_indices:
                 date_str = week_dates[i]
-                
-                # Shuffle locations to prevent bias
                 shuffled_locs = list(locations)
-                random.shuffle(shuffled_locs)
+                random.shuffle(shuffled_locs) # Randomize shop order
 
                 for loc in shuffled_locs:
                     min_req = loc_min_max[loc.id]["min"]
                     current = loc_day_counts.get(f"{loc.id}_{date_str}", 0)
                     
                     while current < min_req:
-                        # Find candidates
+                        # Find best candidate
                         candidates = []
                         for emp in employees:
                             if is_available(emp.id, date_str, i, loc.id):
                                 score = 0
-                                # Prefer people who like this location
-                                if loc.id in pref_map[emp.id]: score += 10
-                                # Prefer people who haven't met min days yet
-                                if emp_days_assigned[emp.id] < emp_targets[emp.id]["min"]: score += 5
-                                # Slight random factor to break ties
+                                # HUGE weight for Priority (lower number is better)
+                                # P1 = 400, P4 = 100
+                                score += (5 - emp.priority) * 100 
+                                
+                                # Preference weight
+                                if loc.id in pref_map[emp.id]: score += 50
+                                
+                                # Need Hours weight
+                                if emp_days_assigned[emp.id] < emp_targets[emp.id]["min"]: score += 20
+                                
                                 score += random.random()
                                 candidates.append((score, emp))
                         
-                        if not candidates:
-                            break # No one available for this slot, skip
+                        if not candidates: break
                         
-                        # Pick best
                         candidates.sort(key=lambda x: x[0], reverse=True)
                         best_emp = candidates[0][1]
                         assign(best_emp.id, loc.id, date_str)
                         current += 1
 
-            # --- PHASE 2: Hours (Ensure Employees Meet Minimums) ---
-            # Iterate employees who need days
+            # --- PHASE 3: Top Up (Ensure Min Days) ---
+            # If any employee is still below min days, shove them anywhere
             needy_employees = [e for e in employees if emp_days_assigned[e.id] < emp_targets[e.id]["min"]]
-            random.shuffle(needy_employees)
+            needy_employees.sort(key=lambda x: x.priority) # Prioritize P1s getting hours
 
             for emp in needy_employees:
                 needed = emp_targets[emp.id]["min"] - emp_days_assigned[emp.id]
-                
-                # Check each day to find a spot
                 for i in day_indices:
                     if needed <= 0: break
                     date_str = week_dates[i]
                     
-                    if emp_working_today.get(f"{emp.id}_{date_str}", False): continue
-                    if i in bad_days[emp.id]: continue
-
-                    # Find a shop that isn't over capacity
-                    possible_locs = []
-                    for loc in locations:
-                        current = loc_day_counts.get(f"{loc.id}_{date_str}", 0)
-                        max_allowed = loc_min_max[loc.id]["max"]
-                        
-                        if current < max_allowed and loc.id not in bad_locs[emp.id]:
-                            score = 0
-                            if loc.id in pref_map[emp.id]: score += 5
-                            possible_locs.append((score, loc))
-                    
-                    if possible_locs:
-                        possible_locs.sort(key=lambda x: x[0], reverse=True)
-                        target_loc = possible_locs[0][1]
-                        assign(emp.id, target_loc.id, date_str)
-                        needed -= 1
+                    if is_available(emp.id, date_str, i, -1): # Check personal constraints only
+                        # Find ANY shop with space
+                        for loc in locations:
+                            max_allowed = loc_min_max[loc.id]["max"]
+                            current = loc_day_counts.get(f"{loc.id}_{date_str}", 0)
+                            if current < max_allowed and loc.id not in bad_locs[emp.id]:
+                                assign(emp.id, loc.id, date_str)
+                                needed -= 1
+                                break
 
         session.commit()
     return {"status": "ok"}
@@ -340,14 +359,20 @@ def clear_week_schedule(req: ClearWeekRequest):
 # --- Management Routes ---
 @app.post("/api/employees", dependencies=[Depends(get_current_admin)])
 def add_employee(req: NameRequest):
-    with Session(engine) as session: session.add(Employee(name=req.name)); session.commit()
+    with Session(engine) as session: session.add(Employee(name=req.name, priority=req.priority)); session.commit()
     return {"status": "ok"}
+
 @app.put("/api/employees/{id}", dependencies=[Depends(get_current_admin)])
 def update_employee(id: int, req: NameRequest):
     with Session(engine) as session: 
         e = session.get(Employee, id)
-        if e: e.name = req.name; session.add(e); session.commit()
+        if e: 
+            e.name = req.name
+            e.priority = req.priority
+            session.add(e)
+            session.commit()
     return {"status": "ok"}
+
 @app.delete("/api/employees/{id}", dependencies=[Depends(get_current_admin)])
 def delete_employee(id: int):
     with Session(engine) as session:
