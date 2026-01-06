@@ -30,27 +30,21 @@ class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
 class LocationTargetRequest(BaseModel): location_id: int; min_employees: int; max_employees: int
+# UPDATED: Request model for Min/Max
+class EmployeeTargetDaysRequest(BaseModel): employee_id: int; min_days: int; max_days: int
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
-# NEW: Export Request Model
 class ExportRequest(BaseModel): tables: list[str]
 
-# --- Helper to map string names to SQLModel classes ---
 TABLE_MAP = {
-    "employees": Employee,
-    "locations": Location,
-    "shifts": Shift,
-    "location_constraints": LocationConstraint,
-    "employee_constraints": EmployeeConstraint,
-    "location_preferences": LocationPreference,
-    "coworker_preferences": EmployeeCoworkerPreference,
-    "unavailable_days": EmployeeUnavailableDay,
-    "employee_target_days": EmployeeTargetDays,
-    "location_targets": LocationTarget,
-    "week_status": WeekStatus
+    "employees": Employee, "locations": Location, "shifts": Shift,
+    "location_constraints": LocationConstraint, "employee_constraints": EmployeeConstraint,
+    "location_preferences": LocationPreference, "coworker_preferences": EmployeeCoworkerPreference,
+    "unavailable_days": EmployeeUnavailableDay, "employee_target_days": EmployeeTargetDays,
+    "location_targets": LocationTarget, "week_status": WeekStatus
 }
 
-# --- Backup/Restore Routes (Restored) ---
+# --- Backup/Restore Routes ---
 
 @app.post("/api/backup/export", dependencies=[Depends(get_current_admin)])
 def export_data(req: ExportRequest):
@@ -65,32 +59,20 @@ def export_data(req: ExportRequest):
 
 @app.post("/api/backup/import", dependencies=[Depends(get_current_admin)])
 async def import_data(request: Request):
-    try:
-        data = await request.json()
-    except:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
+    try: data = await request.json()
+    except: raise HTTPException(status_code=400, detail="Invalid JSON")
     with Session(engine) as session:
-        # Disable Foreign Key checks for MySQL to allow arbitrary insert order
         session.exec(text("SET FOREIGN_KEY_CHECKS=0"))
-        
         try:
             for table_name, rows in data.items():
                 if table_name in TABLE_MAP and rows:
                     model = TABLE_MAP[table_name]
-                    # 1. Clear existing
                     session.exec(delete(model))
-                    # 2. Insert new
                     for row in rows:
-                        try:
-                            obj = model.model_validate(row)
-                            session.add(obj)
-                        except Exception as e:
-                            print(f"Skipping invalid row in {table_name}: {e}")
+                        try: session.add(model.model_validate(row))
+                        except Exception as e: print(f"Skipping invalid row in {table_name}: {e}")
             session.commit()
-        finally:
-            session.exec(text("SET FOREIGN_KEY_CHECKS=1"))
-            
+        finally: session.exec(text("SET FOREIGN_KEY_CHECKS=1"))
     return {"status": "ok", "message": "Import successful"}
 
 # --- Standard Routes ---
@@ -113,6 +95,7 @@ def get_roster_state(start_date_str: str, request: Request):
         if is_admin or is_published:
             shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
         
+        # Constraints
         loc_constraints = session.exec(select(LocationConstraint)).all()
         emp_constraints = session.exec(select(EmployeeConstraint)).all()
         loc_preferences = session.exec(select(LocationPreference)).all()
@@ -134,8 +117,9 @@ def get_roster_state(start_date_str: str, request: Request):
             if lp.employee_id in constraints: constraints[lp.employee_id]["preferred_locs"].append(lp.location_id)
         for dc in day_constraints:
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
+        # UPDATED: Mapping for min/max
         for td in target_days:
-            if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = td.target_days
+            if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = {"min": td.min_days, "max": td.max_days}
         for cp in coworker_preferences:
             if cp.employee_id in constraints: constraints[cp.employee_id]["preferred_coworkers"].append(cp.target_employee_id)
 
@@ -225,7 +209,8 @@ def autofill_schedule(req: AutoFillRequest):
             
             pref_map = {e.id: [] for e in employees}
             for p in prefs: pref_map[p.employee_id].append(p.location_id)
-            target_map = {t.employee_id: t.target_days for t in targets}
+            # UPDATED Smart Fill: Use min_days as target
+            target_map = {t.employee_id: t.min_days for t in targets}
             bad_days_map = {u.employee_id: [] for u in unavailable}
             for u in unavailable: bad_days_map[u.employee_id].append(u.day_of_week)
 
@@ -323,12 +308,18 @@ def remove_day_constraint(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id==req.employee_id, EmployeeUnavailableDay.day_of_week==req.target_id)); session.commit()
     return {"status": "ok"}
+
+# UPDATED: Min/Max Employee Target Route
 @app.post("/api/constraints/target_days", dependencies=[Depends(get_current_admin)])
-def set_target_days(req: ConstraintRequest):
+def set_target_days(req: EmployeeTargetDaysRequest):
     with Session(engine) as session:
         existing = session.exec(select(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == req.employee_id)).first()
-        if existing: existing.target_days = req.target_id; session.add(existing)
-        else: session.add(EmployeeTargetDays(employee_id=req.employee_id, target_days=req.target_id))
+        if existing: 
+            existing.min_days = req.min_days
+            existing.max_days = req.max_days
+            session.add(existing)
+        else: 
+            session.add(EmployeeTargetDays(employee_id=req.employee_id, min_days=req.min_days, max_days=req.max_days))
         session.commit()
     return {"status": "ok"}
 
