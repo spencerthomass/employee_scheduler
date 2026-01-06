@@ -117,7 +117,7 @@
                                 </td>
                                 <td class="col-total border-b text-center font-bold relative group/total" :class="totalClass(emp.id)">
                                     {{ countDays(emp.id) }}
-                                    <div v-if="constraints[emp.id].target_days" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover/total:opacity-100 pointer-events-none whitespace-nowrap z-50">Target: {{ constraints[emp.id].target_days }} days</div>
+                                    <div v-if="constraints[emp.id].target_days" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover/total:opacity-100 pointer-events-none whitespace-nowrap z-50">Target: {{ constraints[emp.id].target_days.min }}-{{ constraints[emp.id].target_days.max }} days</div>
                                 </td>
                             </tr>
                         </tbody>
@@ -204,9 +204,14 @@
                         <div class="flex items-center space-x-2 bg-blue-50 p-2 rounded border border-blue-100">
                             <span class="text-sm font-bold text-blue-800">Target Days/Week:</span>
                             <input type="number" min="0" max="7" 
-                                   :value="constraints[selectedEmp.id].target_days"
-                                   @change="setTargetDays($event.target.value)"
-                                   class="w-12 border p-1 rounded text-center font-mono">
+                                   :value="constraints[selectedEmp.id].target_days?.min || 0"
+                                   @change="setTargetDays($event.target.value, constraints[selectedEmp.id].target_days?.max)"
+                                   class="w-10 border p-1 rounded text-center font-mono text-xs">
+                            <span class="text-gray-400">-</span>
+                            <input type="number" min="0" max="7" 
+                                   :value="constraints[selectedEmp.id].target_days?.max || 7"
+                                   @change="setTargetDays(constraints[selectedEmp.id].target_days?.min, $event.target.value)"
+                                   class="w-10 border p-1 rounded text-center font-mono text-xs">
                         </div>
                     </div>
                     <div class="flex space-x-4 flex-1 overflow-hidden">
@@ -316,20 +321,27 @@
                     return null;
                 };
 
-                // REVERTED: Single Target Logic
+                // UPDATED: Min/Max logic
                 const totalClass = (empId) => {
                     const count = countDays(empId); const target = constraints.value[empId]?.target_days;
-                    if (target === undefined || target === null || target === 0) return 'text-gray-500'; 
-                    if (count === target) return 'text-green-600 bg-green-50 border-l-4 border-green-500'; 
-                    if (count > target) return 'text-red-600 bg-red-50 border-l-4 border-red-500'; 
-                    return 'text-yellow-600 bg-yellow-50 border-l-4 border-yellow-500'; 
+                    if (!target) return 'text-gray-500'; 
+                    const min = target.min || 0; const max = target.max || 7;
+                    if (count < min) return 'text-orange-600 bg-orange-50 border-l-4 border-orange-500'; 
+                    if (count > max) return 'text-blue-600 bg-blue-50 border-l-4 border-blue-500'; 
+                    return 'text-green-600 bg-green-50 border-l-4 border-green-500'; 
                 };
 
                 const openConstraints = (emp) => { selectedEmp.value = emp; modalMode.value = 'constraints'; };
                 const formatTime = (iso) => iso ? new Date(iso).toLocaleString() : '';
-                // REVERTED: Single Target Set
-                const setTargetDays = async (val) => { const empId = selectedEmp.value.id; let days = parseInt(val); if(isNaN(days)) days = 0; constraints.value[empId].target_days = days; await fetch('/api/constraints/target_days', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, target_id: days }) }); };
                 
+                // UPDATED: Save min/max range
+                const setTargetDays = async (minVal, maxVal) => {
+                    const empId = selectedEmp.value.id; 
+                    const min = parseInt(minVal) || 0; const max = parseInt(maxVal) || 7;
+                    constraints.value[empId].target_days = {min, max}; 
+                    await fetch('/api/constraints/target_days', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, min_days: min, max_days: max }) }); 
+                };
+
                 const toggleConstraint = async (type, targetId, evt) => {
                     const empId = selectedEmp.value.id; const isAdd = evt.target.checked; const method = isAdd ? 'POST' : 'DELETE'; 
                     let apiPath = type; let list = [];
@@ -370,7 +382,7 @@
                     modalMode, passwordInput, newItemName, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
                     fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem, publishSchedule, runAutoFill, setLocTarget, getCoverageClass,
                     onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime,
-                    // Backup (Restored)
+                    // Backup
                     backupMode, exportTables, importData, importTables, doExport, onFileChange, doImport,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
                 };
