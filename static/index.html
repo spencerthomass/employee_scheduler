@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emissions Plus Scheduler</title>
+    
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -35,7 +37,6 @@
             
             <div class="p-3 bg-gray-100 border-t flex flex-col space-y-2 shrink-0">
                 <button @click="showModal('autofill')" class="w-full py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700 shadow text-center">✨ Auto-Fill</button>
-                <button @click="showModal('backup')" class="w-full py-2 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 shadow text-center">💾 Backup / Restore</button>
                 <div class="grid grid-cols-2 gap-2">
                     <button @click="showModal('staff')" class="py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow text-center">Staff</button>
                     <button @click="showModal('shops')" class="py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow text-center">Shops</button>
@@ -44,18 +45,21 @@
         </div>
 
         <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+            
             <div class="bg-white border-b p-3 flex justify-between items-center shadow-sm z-10 shrink-0 gap-2 overflow-x-auto">
                 <div class="flex items-center space-x-2 md:space-x-6">
                     <div class="flex items-center shrink-0">
                         <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" alt="Emissions Plus" class="h-8 md:h-10 mr-2 md:mr-3">
                         <span class="text-gray-700 font-extrabold text-lg md:text-xl tracking-tight hidden md:block">Scheduler</span>
                     </div>
+
                     <div class="flex items-center bg-gray-100 rounded-lg p-1 border shrink-0">
                         <button @click="changeWeek(-7)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold">&lt;</button>
                         <span class="px-2 md:px-4 font-bold text-gray-700 text-xs md:text-sm whitespace-nowrap">{{ formatDateReadable(weekDates[0]) }}</span>
                         <button @click="changeWeek(7)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold">&gt;</button>
                     </div>
                 </div>
+                
                 <div class="flex items-center space-x-4 shrink-0">
                     <div class="text-right hidden lg:block">
                         <div v-if="isPublished" class="text-xs text-green-600 font-bold">Published {{ formatTime(publishedAt) }}</div>
@@ -70,27 +74,50 @@
             </div>
 
             <div class="flex-1 overflow-auto bg-gray-50 flex flex-col relative">
+                
                 <div v-if="!isAdmin && !isPublished" class="absolute inset-0 z-50 bg-gray-100 flex flex-col items-center justify-center">
-                    <div class="text-6xl mb-4">🚧</div><h2 class="text-2xl font-bold text-gray-700">Schedule Not Posted</h2><p class="text-gray-500">The schedule for this week is still being worked on.</p>
+                    <div class="text-6xl mb-4">🚧</div>
+                    <h2 class="text-2xl font-bold text-gray-700">Schedule Not Posted</h2>
+                    <p class="text-gray-500">The schedule for this week is still being worked on.</p>
                 </div>
+
                 <div v-if="showCoverage" class="bg-white border-b-4 border-gray-200 p-4 shadow-sm shrink-0 overflow-x-auto">
                     <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Shop Coverage</h2>
                     <table class="w-full border-collapse text-xs">
                         <thead><tr><th class="col-name text-left p-1 text-gray-400">Location</th><th v-for="date in weekDates" :key="date" class="col-day text-center p-1 text-gray-400">{{ getDayName(date) }}</th><th class="col-total"></th></tr></thead>
-                        <tbody><tr v-for="loc in locations" :key="loc.id" class="border-b border-gray-100"><td class="col-name p-2 font-bold text-gray-700">{{ loc.name }}</td><td v-for="date in weekDates" :key="date" class="col-day p-1 text-center"><div :class="getCoverageClass(loc.id, date)" class="inline-block px-3 py-1 rounded font-bold border">{{ getShopCount(loc.id, date) }}</div></td><td class="col-total"></td></tr></tbody>
+                        <tbody>
+                            <tr v-for="loc in locations" :key="loc.id" class="border-b border-gray-100">
+                                <td class="col-name p-2 font-bold text-gray-700">{{ loc.name }}</td>
+                                <td v-for="date in weekDates" :key="date" class="col-day p-1 text-center">
+                                    <div :class="getCoverageClass(loc.id, date)" class="inline-block px-3 py-1 rounded font-bold border">{{ getShopCount(loc.id, date) }}</div>
+                                </td>
+                                <td class="col-total"></td>
+                            </tr>
+                        </tbody>
                     </table>
                 </div>
+
                 <div class="flex-1 min-h-0">
                     <table class="w-full border-collapse bg-white">
-                        <thead class="sticky top-0 z-10 bg-gray-100 shadow-sm"><tr><th class="col-name p-3 text-left text-gray-600 font-bold border-r bg-gray-100">Employee</th><th v-for="date in weekDates" :key="date" class="col-day p-2 text-center border-r bg-gray-100"><div class="font-bold text-gray-800">{{ getDayName(date) }}</div><div class="text-xs text-gray-500">{{ formatDateShort(date) }}</div></th><th class="col-total p-2 text-center text-gray-600 font-bold bg-gray-100">Total</th></tr></thead>
+                        <thead class="sticky top-0 z-10 bg-gray-100 shadow-sm">
+                            <tr><th class="col-name p-3 text-left text-gray-600 font-bold border-r bg-gray-100">Employee</th><th v-for="date in weekDates" :key="date" class="col-day p-2 text-center border-r bg-gray-100"><div class="font-bold text-gray-800">{{ getDayName(date) }}</div><div class="text-xs text-gray-500">{{ formatDateShort(date) }}</div></th><th class="col-total p-2 text-center text-gray-600 font-bold bg-gray-100">Total</th></tr>
+                        </thead>
                         <tbody>
                             <tr v-for="emp in employees" :key="emp.id" class="emp-row bg-white hover:bg-gray-50 transition-colors">
-                                <td class="col-name px-3 py-1 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b"><div class="flex items-center"><div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2 shrink-0">{{ getInitials(emp.name) }}</div><span class="truncate">{{ emp.name }}</span></div></td>
+                                <td class="col-name px-3 py-1 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
+                                    <div class="flex items-center"><div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs mr-2 shrink-0">{{ getInitials(emp.name) }}</div><span class="truncate">{{ emp.name }}</span></div>
+                                </td>
                                 <td v-for="date in weekDates" :key="date" @dragover.prevent @drop="onDrop($event, emp.id, date)" class="col-day border-r border-b p-1 text-center relative group touch-manipulation">
                                     <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-xs select-none">-</div>
-                                    <div v-if="grid[emp.id][date]" :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-indigo-100 text-indigo-800 border-indigo-100'" class="mx-1 py-1.5 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors select-none" :title="getWarning(emp.id, date)"><div class="flex items-center truncate"><span v-if="getWarning(emp.id, date)" class="mr-1 text-lg">⚠️</span><span class="truncate">{{ grid[emp.id][date].name }}</span></div><button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-indigo-400 hover:text-red-500 font-bold ml-1">&times;</button></div>
+                                    <div v-if="grid[emp.id][date]" :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-indigo-100 text-indigo-800 border-indigo-100'" class="mx-1 py-1.5 rounded text-xs font-bold shadow-sm flex justify-between items-center px-2 group/cell cursor-default border transition-colors select-none" :title="getWarning(emp.id, date)">
+                                        <div class="flex items-center truncate"><span v-if="getWarning(emp.id, date)" class="mr-1 text-lg">⚠️</span><span class="truncate">{{ grid[emp.id][date].name }}</span></div>
+                                        <button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-indigo-400 hover:text-red-500 font-bold ml-1">&times;</button>
+                                    </div>
                                 </td>
-                                <td class="col-total border-b text-center font-bold relative group/total" :class="totalClass(emp.id)">{{ countDays(emp.id) }}<div v-if="constraints[emp.id].target_days" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover/total:opacity-100 pointer-events-none whitespace-nowrap z-50">Target: {{ constraints[emp.id].target_days }} days</div></td>
+                                <td class="col-total border-b text-center font-bold relative group/total" :class="totalClass(emp.id)">
+                                    {{ countDays(emp.id) }}
+                                    <div v-if="constraints[emp.id].target_days" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover/total:opacity-100 pointer-events-none whitespace-nowrap z-50">Target: {{ constraints[emp.id].target_days }} days</div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -102,67 +129,53 @@
                     <h3 class="text-lg font-bold mb-4">Admin Access</h3><input type="password" v-model="passwordInput" placeholder="Password" class="w-full border p-2 rounded mb-4" @keyup.enter="login"><button @click="login" class="w-full bg-indigo-600 text-white py-2 rounded font-bold">Login</button>
                 </div>
                 
-                <div v-if="modalMode === 'backup'" class="bg-white p-6 rounded shadow-lg w-[500px] flex flex-col max-h-[80vh]">
-                    <h3 class="text-lg font-bold mb-2 text-orange-600">Backup & Restore</h3>
-                    
-                    <div class="flex space-x-4 border-b pb-4 mb-4">
-                        <button @click="backupMode='export'" :class="backupMode=='export'?'bg-blue-600 text-white':'bg-gray-100 text-gray-600'" class="flex-1 py-2 rounded font-bold">Export</button>
-                        <button @click="backupMode='import'" :class="backupMode=='import'?'bg-red-600 text-white':'bg-gray-100 text-gray-600'" class="flex-1 py-2 rounded font-bold">Import</button>
-                    </div>
-
-                    <div v-if="backupMode === 'export'" class="flex-1 overflow-auto">
-                        <p class="text-xs text-gray-500 mb-2">Select tables to download.</p>
-                        <div class="space-y-1">
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="employees"><span>Employees</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="locations"><span>Locations</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="shifts"><span>Shifts</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="location_constraints"><span>Forbidden Locs</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="location_preferences"><span>Preferred Locs</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="employee_constraints"><span>Forbidden Staff</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="coworker_preferences"><span>Preferred Staff</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="unavailable_days"><span>Unavailable Days</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="employee_target_days"><span>Staff Targets</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="location_targets"><span>Shop Targets</span></label>
-                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded"><input type="checkbox" v-model="exportTables" value="week_status"><span>Publish Status</span></label>
-                        </div>
-                        <button @click="doExport" class="w-full mt-4 bg-blue-600 text-white py-2 rounded font-bold shadow">Download Backup</button>
-                    </div>
-
-                    <div v-if="backupMode === 'import'" class="flex-1 overflow-auto">
-                        <p class="text-xs text-red-500 font-bold mb-2">WARNING: This wipes selected tables before importing.</p>
-                        <input type="file" @change="onFileChange" class="w-full border p-2 mb-4">
-                        
-                        <div v-if="importData">
-                            <p class="text-xs text-gray-500 mb-2">Select tables to restore from file:</p>
-                            <div class="space-y-1">
-                                <label v-for="(rows, key) in importData" :key="key" class="flex items-center space-x-2 p-2 hover:bg-gray-50 border rounded">
-                                    <input type="checkbox" v-model="importTables" :value="key">
-                                    <span class="capitalize font-bold">{{ key.replace('_', ' ') }}</span>
-                                    <span class="text-xs text-gray-400">({{ rows.length }} items)</span>
-                                </label>
-                            </div>
-                            <button @click="doImport" class="w-full mt-4 bg-red-600 text-white py-2 rounded font-bold shadow">Import Selected</button>
-                        </div>
-                    </div>
-                    
-                    <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline text-center">Close</button>
-                </div>
-
                 <div v-if="modalMode === 'autofill'" class="bg-white p-6 rounded shadow-lg w-96">
-                    <h3 class="text-lg font-bold mb-4 text-purple-700">Auto-Schedule</h3>
-                    <div class="space-y-3"><button @click="runAutoFill('copy')" class="w-full text-left p-3 border rounded hover:bg-gray-50 flex items-center"><span class="text-xl mr-3">📋</span><div><div class="font-bold text-gray-800">Copy Last Week</div><div class="text-xs text-gray-500">Duplicate previous roster.</div></div></button><button @click="runAutoFill('smart')" class="w-full text-left p-3 border rounded hover:bg-gray-50 flex items-center"><span class="text-xl mr-3">🤖</span><div><div class="font-bold text-gray-800">Smart Fill</div><div class="text-xs text-gray-500">Assign based on rules.</div></div></button></div>
+                    <h3 class="text-lg font-bold mb-4 text-purple-700">Auto-Schedule Tools</h3>
+                    <div class="space-y-3">
+                        <button @click="runAutoFill('copy')" class="w-full text-left p-3 border rounded hover:bg-gray-50 flex items-center"><span class="text-xl mr-3">📋</span><div><div class="font-bold text-gray-800">Copy Last Week</div><div class="text-xs text-gray-500">Duplicate the previous week's roster.</div></div></button>
+                        <button @click="runAutoFill('smart')" class="w-full text-left p-3 border rounded hover:bg-gray-50 flex items-center"><span class="text-xl mr-3">🤖</span><div><div class="font-bold text-gray-800">Run Smart Fill</div><div class="text-xs text-gray-500">Assign staff based on rules & targets.</div></div></button>
+                    </div>
+                    <div class="mt-4 text-xs text-red-500 font-bold bg-red-50 p-2 rounded">Warning: This will overwrite any existing schedule for this week.</div>
                     <button @click="modalMode = null" class="mt-4 text-gray-500 w-full text-center hover:underline">Cancel</button>
                 </div>
 
                 <div v-if="modalMode === 'staff'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
-                    <h3 class="text-lg font-bold mb-4">Manage Employees</h3><div class="flex mb-4"><input v-model="newItemName" placeholder="New Employee Name" class="border p-2 rounded-l flex-1"><button @click="createItem('employees')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button></div><div class="flex-1 overflow-y-auto border-t pt-2"><div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b"><span class="font-bold text-gray-700 truncate w-32">{{ emp.name }}</span><div class="flex items-center space-x-1"><button @click="openConstraints(emp)" class="text-gray-500 hover:text-gray-800 text-xs font-bold border border-gray-200 px-2 py-1 rounded">Rules</button><button @click="updateItem('employees', emp.id, emp.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button><button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button></div></div></div><button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
+                    <h3 class="text-lg font-bold mb-4">Manage Employees</h3>
+                    <div class="flex mb-4"><input v-model="newItemName" placeholder="New Employee Name" class="border p-2 rounded-l flex-1"><button @click="createItem('employees')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button></div>
+                    <div class="flex-1 overflow-y-auto border-t pt-2"><div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b"><span class="font-bold text-gray-700 truncate w-32">{{ emp.name }}</span><div class="flex items-center space-x-1"><button @click="openConstraints(emp)" class="text-gray-500 hover:text-gray-800 text-xs font-bold border border-gray-200 px-2 py-1 rounded">Rules</button><button @click="updateItem('employees', emp.id, emp.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button><button @click="deleteItem('employees', emp.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button></div></div></div>
+                    <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
+                
                 <div v-if="modalMode === 'shops'" class="bg-white p-6 rounded shadow-lg w-[500px] max-h-[80vh] flex flex-col">
-                    <h3 class="text-lg font-bold mb-4">Manage Shops</h3><div class="flex mb-4"><input v-model="newItemName" placeholder="New Shop Name" class="border p-2 rounded-l flex-1"><button @click="createItem('locations')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button></div><div class="flex-1 overflow-y-auto border-t pt-2"><div v-for="loc in locations" :key="loc.id" class="flex justify-between items-center py-2 border-b"><span class="font-bold text-gray-700 w-32 truncate">{{ loc.name }}</span><div class="flex items-center space-x-1"><span class="text-xs text-gray-400">Target:</span><input type="number" min="1" class="w-10 border rounded text-center text-xs p-1" :value="locationTargets[loc.id] || 1" @change="setLocTarget(loc.id, $event.target.value)"></div><div class="flex items-center space-x-1 ml-auto"><button @click="updateItem('locations', loc.id, loc.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button><button @click="deleteItem('locations', loc.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button></div></div></div><button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
+                    <h3 class="text-lg font-bold mb-4">Manage Shops</h3>
+                    <div class="flex mb-4"><input v-model="newItemName" placeholder="New Shop Name" class="border p-2 rounded-l flex-1"><button @click="createItem('locations')" class="bg-green-600 text-white px-4 rounded-r font-bold">+</button></div>
+                    <div class="flex-1 overflow-y-auto border-t pt-2">
+                        <div v-for="loc in locations" :key="loc.id" class="flex justify-between items-center py-2 border-b">
+                            <span class="font-bold text-gray-700 w-32 truncate">{{ loc.name }}</span>
+                            <div class="flex items-center space-x-1">
+                                <span class="text-xs text-gray-400">Target:</span>
+                                <input type="number" min="1" class="w-8 border rounded text-center text-xs p-1" :value="locationTargets[loc.id]?.min || 1" @change="setLocTarget(loc.id, $event.target.value, locationTargets[loc.id]?.max)">
+                                <span class="text-xs text-gray-400">-</span>
+                                <input type="number" min="1" class="w-8 border rounded text-center text-xs p-1" :value="locationTargets[loc.id]?.max || 1" @change="setLocTarget(loc.id, locationTargets[loc.id]?.min, $event.target.value)">
+                            </div>
+                            <div class="flex items-center space-x-1 ml-auto"><button @click="updateItem('locations', loc.id, loc.name)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button><button @click="deleteItem('locations', loc.id)" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-2 py-1 rounded">Del</button></div>
+                        </div>
+                    </div>
+                    <button @click="modalMode = null" class="mt-4 text-gray-500 hover:underline">Close</button>
                 </div>
+
                 <div v-if="modalMode === 'constraints'" class="bg-white p-6 rounded shadow-lg w-[1000px] max-h-[90vh] flex flex-col">
-                    <h3 class="text-lg font-bold mb-2">Rules for <span class="text-indigo-600">{{ selectedEmp.name }}</span></h3><div class="flex justify-between items-center border-b pb-4 mb-4"><p class="text-xs text-gray-500">Set Preferences and Restrictions.</p><div class="flex items-center space-x-2 bg-blue-50 p-2 rounded border border-blue-100"><span class="text-sm font-bold text-blue-800">Target Days/Week:</span><input type="number" min="0" max="7" :value="constraints[selectedEmp.id].target_days" @change="setTargetDays($event.target.value)" class="w-12 border p-1 rounded text-center font-mono"></div></div>
-                    <div class="flex space-x-4 flex-1 overflow-hidden"><div class="flex-1 flex flex-col border rounded p-2 bg-green-50 border-green-200"><h4 class="font-bold text-xs uppercase text-green-700 mb-2">Preferred Shops</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="loc in locations" :key="loc.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].preferred_locs.includes(loc.id)" @change="toggleConstraint('preference', loc.id, $event)"><span class="text-sm">{{ loc.name }}</span></label></div></div><div class="flex-1 flex flex-col border rounded p-2 bg-green-50 border-green-200"><h4 class="font-bold text-xs uppercase text-green-700 mb-2">Preferred Staff</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="emp in employees" :key="emp.id" v-show="emp.id !== selectedEmp.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].preferred_coworkers.includes(emp.id)" @change="toggleConstraint('preference_emp', emp.id, $event)"><span class="text-sm">{{ emp.name }}</span></label></div></div><div class="w-32 flex flex-col border rounded p-2 bg-gray-100 border-gray-300"><h4 class="font-bold text-xs uppercase text-gray-600 mb-2">Can't Work</h4><div class="flex-1 space-y-1"><label v-for="(day, idx) in ['Mon','Tue','Wed','Thu','Fri','Sat']" :key="idx" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].bad_days.includes(idx)" @change="toggleConstraint('day', idx, $event)"><span class="text-sm">{{ day }}</span></label></div></div><div class="flex-1 flex flex-col border rounded p-2 bg-red-50 border-red-200"><h4 class="font-bold text-xs uppercase text-red-700 mb-2">Avoid Shops</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="loc in locations" :key="loc.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].bad_locs.includes(loc.id)" @change="toggleConstraint('location', loc.id, $event)"><span class="text-sm">{{ loc.name }}</span></label></div></div><div class="flex-1 flex flex-col border rounded p-2 bg-red-50 border-red-200"><h4 class="font-bold text-xs uppercase text-red-700 mb-2">Avoid Staff</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="emp in employees" :key="emp.id" v-show="emp.id !== selectedEmp.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].bad_coworkers.includes(emp.id)" @change="toggleConstraint('employee', emp.id, $event)"><span class="text-sm">{{ emp.name }}</span></label></div></div></div><button @click="modalMode = 'staff'" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded font-bold">Back</button></div>
+                    <h3 class="text-lg font-bold mb-2">Rules for <span class="text-indigo-600">{{ selectedEmp.name }}</span></h3>
+                    <div class="flex justify-between items-center border-b pb-4 mb-4"><p class="text-xs text-gray-500">Set Preferences and Restrictions.</p><div class="flex items-center space-x-2 bg-blue-50 p-2 rounded border border-blue-100"><span class="text-sm font-bold text-blue-800">Target Days/Week:</span><input type="number" min="0" max="7" :value="constraints[selectedEmp.id].target_days" @change="setTargetDays($event.target.value)" class="w-12 border p-1 rounded text-center font-mono"></div></div>
+                    <div class="flex space-x-4 flex-1 overflow-hidden">
+                        <div class="flex-1 flex flex-col border rounded p-2 bg-green-50 border-green-200"><h4 class="font-bold text-xs uppercase text-green-700 mb-2">Preferred Shops</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="loc in locations" :key="loc.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].preferred_locs.includes(loc.id)" @change="toggleConstraint('preference', loc.id, $event)"><span class="text-sm">{{ loc.name }}</span></label></div></div>
+                        <div class="flex-1 flex flex-col border rounded p-2 bg-green-50 border-green-200"><h4 class="font-bold text-xs uppercase text-green-700 mb-2">Preferred Staff</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="emp in employees" :key="emp.id" v-show="emp.id !== selectedEmp.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].preferred_coworkers.includes(emp.id)" @change="toggleConstraint('preference_emp', emp.id, $event)"><span class="text-sm">{{ emp.name }}</span></label></div></div>
+                        <div class="w-32 flex flex-col border rounded p-2 bg-gray-100 border-gray-300"><h4 class="font-bold text-xs uppercase text-gray-600 mb-2">Can't Work</h4><div class="flex-1 space-y-1"><label v-for="(day, idx) in ['Mon','Tue','Wed','Thu','Fri','Sat']" :key="idx" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].bad_days.includes(idx)" @change="toggleConstraint('day', idx, $event)"><span class="text-sm">{{ day }}</span></label></div></div>
+                        <div class="flex-1 flex flex-col border rounded p-2 bg-red-50 border-red-200"><h4 class="font-bold text-xs uppercase text-red-700 mb-2">Avoid Shops</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="loc in locations" :key="loc.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].bad_locs.includes(loc.id)" @change="toggleConstraint('location', loc.id, $event)"><span class="text-sm">{{ loc.name }}</span></label></div></div>
+                        <div class="flex-1 flex flex-col border rounded p-2 bg-red-50 border-red-200"><h4 class="font-bold text-xs uppercase text-red-700 mb-2">Avoid Staff</h4><div class="overflow-y-auto flex-1 space-y-1"><label v-for="emp in employees" :key="emp.id" v-show="emp.id !== selectedEmp.id" class="flex items-center space-x-2 p-1 bg-white border rounded"><input type="checkbox" :checked="constraints[selectedEmp.id].bad_coworkers.includes(emp.id)" @change="toggleConstraint('employee', emp.id, $event)"><span class="text-sm">{{ emp.name }}</span></label></div></div>
+                    </div>
+                    <button @click="modalMode = 'staff'" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded font-bold">Back</button>
+                </div>
             </div>
         </div>
     </div>
@@ -182,12 +195,6 @@
                 
                 const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref("");
                 const selectedEmp = ref(null);
-                
-                // BACKUP VARS
-                const backupMode = ref('export');
-                const exportTables = ref(['employees','locations','shifts','location_constraints','location_preferences','employee_constraints','coworker_preferences','unavailable_days','employee_target_days','location_targets','week_status']);
-                const importData = ref(null);
-                const importTables = ref([]);
 
                 const fetchData = async () => {
                     const res = await fetch(`/api/roster/${currentMonday.value}`);
@@ -200,52 +207,19 @@
                     locationTargets.value = data.location_targets;
                 };
 
-                // --- Backup Logic ---
-                const doExport = async () => {
-                    const res = await fetch('/api/backup/export', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ tables: exportTables.value }) });
-                    const blob = await res.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a'); a.href = url; a.download = `scheduler_backup_${new Date().toISOString().split('T')[0]}.json`;
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                };
-
-                const onFileChange = (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            const json = JSON.parse(e.target.result);
-                            importData.value = json;
-                            importTables.value = Object.keys(json);
-                        } catch (err) { alert("Invalid JSON file"); }
-                    };
-                    reader.readAsText(file);
-                };
-
-                const doImport = async () => {
-                    if(!confirm("This will WIPE and replace selected tables. Continue?")) return;
-                    const payload = {};
-                    importTables.value.forEach(key => payload[key] = importData.value[key]);
-                    
-                    const res = await fetch('/api/backup/import', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-                    if(res.ok) { alert("Import Successful!"); location.reload(); }
-                    else alert("Import Failed");
-                };
-
-                const setLocTarget = async (locId, val) => {
-                    const count = parseInt(val) || 1;
-                    locationTargets.value[locId] = count;
-                    await fetch('/api/constraints/location_target', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ location_id: locId, target_count: count }) });
+                const setLocTarget = async (locId, minVal, maxVal) => {
+                    const min = parseInt(minVal) || 1; const max = parseInt(maxVal) || 1;
+                    locationTargets.value[locId] = {min: min, max: max};
+                    await fetch('/api/constraints/location_target', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ location_id: locId, min_employees: min, max_employees: max }) });
                 };
 
                 const getCoverageClass = (locId, date) => {
                     const count = getShopCount(locId, date);
-                    const target = locationTargets.value[locId] || 1;
+                    const target = locationTargets.value[locId] || {min: 1, max: 1};
                     if (count === 0) return 'bg-red-100 text-red-600 border-red-200'; 
-                    if (count < target) return 'bg-orange-100 text-orange-600 border-orange-200'; 
-                    if (count === target) return 'bg-green-100 text-green-700 border-green-200'; 
-                    return 'bg-blue-50 text-blue-600 border-blue-200'; 
+                    if (count < target.min) return 'bg-orange-100 text-orange-600 border-orange-200'; 
+                    if (count > target.max) return 'bg-blue-50 text-blue-600 border-blue-200'; 
+                    return 'bg-green-100 text-green-700 border-green-200'; 
                 };
 
                 const publishSchedule = async () => {
@@ -272,6 +246,7 @@
                     return null;
                 };
 
+                // REVERTED: Single Target Logic
                 const totalClass = (empId) => {
                     const count = countDays(empId); const target = constraints.value[empId]?.target_days;
                     if (target === undefined || target === null || target === 0) return 'text-gray-500'; 
@@ -282,7 +257,9 @@
 
                 const openConstraints = (emp) => { selectedEmp.value = emp; modalMode.value = 'constraints'; };
                 const formatTime = (iso) => iso ? new Date(iso).toLocaleString() : '';
+                // REVERTED: Single Target Set
                 const setTargetDays = async (val) => { const empId = selectedEmp.value.id; let days = parseInt(val); if(isNaN(days)) days = 0; constraints.value[empId].target_days = days; await fetch('/api/constraints/target_days', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, target_id: days }) }); };
+                
                 const toggleConstraint = async (type, targetId, evt) => {
                     const empId = selectedEmp.value.id; const isAdd = evt.target.checked; const method = isAdd ? 'POST' : 'DELETE'; 
                     let apiPath = type; let list = [];
@@ -323,8 +300,6 @@
                     modalMode, passwordInput, newItemName, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
                     fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem, publishSchedule, runAutoFill, setLocTarget, getCoverageClass,
                     onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime,
-                    // Backup
-                    backupMode, exportTables, importData, importTables, doExport, onFileChange, doImport,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
                 };
             }
