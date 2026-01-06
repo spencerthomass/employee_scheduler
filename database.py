@@ -20,6 +20,8 @@ class Employee(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     active: bool = Field(default=True)
+    # NEW: Priority (1=High, 4=Low)
+    priority: int = Field(default=4)
 
 class Location(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -56,7 +58,6 @@ class EmployeeUnavailableDay(SQLModel, table=True):
     employee_id: int = Field(foreign_key="employee.id")
     day_of_week: int 
 
-# UPDATED: Range-based Targets for Employees
 class EmployeeTargetDays(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     employee_id: int = Field(foreign_key="employee.id")
