@@ -37,6 +37,7 @@
             
             <div class="p-3 bg-gray-100 border-t flex flex-col space-y-2 shrink-0">
                 <button @click="showModal('autofill')" class="w-full py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700 shadow text-center">✨ Auto-Fill</button>
+                <button @click="clearSchedule" class="w-full py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700 shadow text-center">🗑️ Clear Week</button>
                 <button @click="showModal('backup')" class="w-full py-2 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 shadow text-center">💾 Backup / Restore</button>
                 <div class="grid grid-cols-2 gap-2">
                     <button @click="showModal('staff')" class="py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow text-center">Staff</button>
@@ -260,6 +261,12 @@
                     locationTargets.value = data.location_targets;
                 };
 
+                const clearSchedule = async () => {
+                    if(!confirm("Are you sure you want to clear the ENTIRE schedule for this week? This cannot be undone.")) return;
+                    await fetch('/api/clear_week', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ week_start: currentMonday.value }) });
+                    fetchData();
+                };
+
                 const doExport = async () => {
                     const res = await fetch('/api/backup/export', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ tables: exportTables.value }) });
                     const blob = await res.blob();
@@ -380,7 +387,7 @@
                 return { 
                     currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage, constraints, isPublished, publishedAt, locationTargets,
                     modalMode, passwordInput, newItemName, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
-                    fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem, publishSchedule, runAutoFill, setLocTarget, getCoverageClass,
+                    fetchData, changeWeek, login, logout, createItem, updateItem, deleteItem, publishSchedule, runAutoFill, clearSchedule, setLocTarget, getCoverageClass,
                     onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime,
                     // Backup
                     backupMode, exportTables, importData, importTables, doExport, onFileChange, doImport,
