@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session, select, delete, or_
+from sqlmodel import Session, select, delete, or_, text
 from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays, WeekStatus, EmployeeCoworkerPreference, LocationTarget
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
+import json
 
 app = FastAPI()
 
@@ -31,8 +32,68 @@ class ConstraintRequest(BaseModel): employee_id: int; target_id: int
 class LocationTargetRequest(BaseModel): location_id: int; min_employees: int; max_employees: int
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
+# NEW: Export Request Model
+class ExportRequest(BaseModel): tables: list[str]
 
-# --- Public Routes ---
+# --- Helper to map string names to SQLModel classes ---
+TABLE_MAP = {
+    "employees": Employee,
+    "locations": Location,
+    "shifts": Shift,
+    "location_constraints": LocationConstraint,
+    "employee_constraints": EmployeeConstraint,
+    "location_preferences": LocationPreference,
+    "coworker_preferences": EmployeeCoworkerPreference,
+    "unavailable_days": EmployeeUnavailableDay,
+    "employee_target_days": EmployeeTargetDays,
+    "location_targets": LocationTarget,
+    "week_status": WeekStatus
+}
+
+# --- Backup/Restore Routes (Restored) ---
+
+@app.post("/api/backup/export", dependencies=[Depends(get_current_admin)])
+def export_data(req: ExportRequest):
+    data = {}
+    with Session(engine) as session:
+        for table_name in req.tables:
+            if table_name in TABLE_MAP:
+                model = TABLE_MAP[table_name]
+                results = session.exec(select(model)).all()
+                data[table_name] = [row.dict() for row in results]
+    return data
+
+@app.post("/api/backup/import", dependencies=[Depends(get_current_admin)])
+async def import_data(request: Request):
+    try:
+        data = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    with Session(engine) as session:
+        # Disable Foreign Key checks for MySQL to allow arbitrary insert order
+        session.exec(text("SET FOREIGN_KEY_CHECKS=0"))
+        
+        try:
+            for table_name, rows in data.items():
+                if table_name in TABLE_MAP and rows:
+                    model = TABLE_MAP[table_name]
+                    # 1. Clear existing
+                    session.exec(delete(model))
+                    # 2. Insert new
+                    for row in rows:
+                        try:
+                            obj = model.model_validate(row)
+                            session.add(obj)
+                        except Exception as e:
+                            print(f"Skipping invalid row in {table_name}: {e}")
+            session.commit()
+        finally:
+            session.exec(text("SET FOREIGN_KEY_CHECKS=1"))
+            
+    return {"status": "ok", "message": "Import successful"}
+
+# --- Standard Routes ---
 
 @app.get("/api/roster/{start_date_str}")
 def get_roster_state(start_date_str: str, request: Request):
@@ -73,7 +134,6 @@ def get_roster_state(start_date_str: str, request: Request):
             if lp.employee_id in constraints: constraints[lp.employee_id]["preferred_locs"].append(lp.location_id)
         for dc in day_constraints:
             if dc.employee_id in constraints: constraints[dc.employee_id]["bad_days"].append(dc.day_of_week)
-        # REVERTED: Single int target
         for td in target_days:
             if td.employee_id in constraints: constraints[td.employee_id]["target_days"] = td.target_days
         for cp in coworker_preferences:
@@ -165,7 +225,6 @@ def autofill_schedule(req: AutoFillRequest):
             
             pref_map = {e.id: [] for e in employees}
             for p in prefs: pref_map[p.employee_id].append(p.location_id)
-            # REVERTED: Simple target map
             target_map = {t.employee_id: t.target_days for t in targets}
             bad_days_map = {u.employee_id: [] for u in unavailable}
             for u in unavailable: bad_days_map[u.employee_id].append(u.day_of_week)
@@ -264,8 +323,6 @@ def remove_day_constraint(req: ConstraintRequest):
     with Session(engine) as session:
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id==req.employee_id, EmployeeUnavailableDay.day_of_week==req.target_id)); session.commit()
     return {"status": "ok"}
-
-# REVERTED: Simple Single Target Route
 @app.post("/api/constraints/target_days", dependencies=[Depends(get_current_admin)])
 def set_target_days(req: ConstraintRequest):
     with Session(engine) as session:
