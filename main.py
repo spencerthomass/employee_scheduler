@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
 import json
+import random # <--- ADDED THIS
 
 app = FastAPI()
 
@@ -34,7 +35,6 @@ class EmployeeTargetDaysRequest(BaseModel): employee_id: int; min_days: int; max
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
 class ExportRequest(BaseModel): tables: list[str]
-# NEW: Clear Week Request
 class ClearWeekRequest(BaseModel): week_start: str
 
 TABLE_MAP = {
@@ -208,29 +208,41 @@ def autofill_schedule(req: AutoFillRequest):
             
             pref_map = {e.id: [] for e in employees}
             for p in prefs: pref_map[p.employee_id].append(p.location_id)
-            target_map = {t.employee_id: t.min_days for t in targets}
+            
+            # Min/Max targets
+            target_map = {t.employee_id: t.max_days for t in targets} # Aim for MAX initially
             bad_days_map = {u.employee_id: [] for u in unavailable}
             for u in unavailable: bad_days_map[u.employee_id].append(u.day_of_week)
 
+            # Create a list of day indices [0, 1, 2, 3, 4, 5]
+            day_indices = list(range(6))
+
             for emp in employees:
-                target = target_map.get(emp.id, 0)
+                target = target_map.get(emp.id, 5) # Default to 5 if no max set
                 if target == 0 or not pref_map[emp.id]: continue
+                
+                # SHUFFLE the days for this employee to prevent "Monday Bias"
+                # This ensures Saturday gets picked roughly 1/6th of the time first
+                random.shuffle(day_indices)
+                
                 days_assigned = 0
-                for day_idx, date_str in enumerate(week_dates):
+                for i in day_indices:
                     if days_assigned >= target: break
-                    if day_idx in bad_days_map.get(emp.id, []): continue
+                    
+                    # Check unavailable day
+                    if i in bad_days_map.get(emp.id, []): continue
+                    
+                    date_str = week_dates[i]
                     session.add(Shift(employee_id=emp.id, location_id=pref_map[emp.id][0], date_str=date_str))
                     days_assigned += 1
 
         session.commit()
     return {"status": "ok"}
 
-# NEW: Clear Week Route
 @app.post("/api/clear_week", dependencies=[Depends(get_current_admin)])
 def clear_week_schedule(req: ClearWeekRequest):
     start_date = datetime.strptime(req.week_start, "%Y-%m-%d").date()
     week_dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6)]
-    
     with Session(engine) as session:
         session.exec(delete(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1]))
         session.commit()
