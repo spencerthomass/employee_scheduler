@@ -173,7 +173,7 @@
                     <button @click="modalMode = null" class="mt-4 text-gray-500 w-full text-center hover:underline">Cancel</button>
                 </div>
 
-                <div v-if="modalMode === 'staff'" class="bg-white p-6 rounded shadow-lg w-96 max-h-[80vh] flex flex-col">
+                <div v-if="modalMode === 'staff'" class="bg-white p-6 rounded shadow-lg w-[600px] max-h-[80vh] flex flex-col">
                     <h3 class="text-lg font-bold mb-4">Manage Employees</h3>
                     <div class="flex mb-4 gap-2">
                         <input v-model="newItemName" placeholder="New Employee Name" class="border p-2 rounded flex-1">
@@ -184,14 +184,19 @@
                     </div>
                     <div class="flex-1 overflow-y-auto border-t pt-2">
                         <div v-for="emp in employees" :key="emp.id" class="flex justify-between items-center py-2 border-b">
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 w-48">
                                 <select :value="emp.priority" @change="updatePriority(emp, $event.target.value)"
                                     :class="{'bg-red-100 text-red-700': emp.priority==1, 'bg-orange-100 text-orange-700': emp.priority==2, 'bg-blue-100 text-blue-700': emp.priority==3, 'bg-gray-100 text-gray-600': emp.priority==4}" 
                                     class="border rounded text-xs p-1 font-bold outline-none cursor-pointer">
                                     <option :value="1">P1</option><option :value="2">P2</option><option :value="3">P3</option><option :value="4">P4</option>
                                 </select>
-                                <span class="font-bold text-gray-700 truncate w-24">{{ emp.name }}</span>
+                                <span class="font-bold text-gray-700 truncate">{{ emp.name }}</span>
                             </div>
+                            
+                            <div class="text-xs text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border border-gray-200">
+                                Target: {{ constraints[emp.id]?.target_days?.min || 0 }} - {{ constraints[emp.id]?.target_days?.max || 7 }}
+                            </div>
+
                             <div class="flex items-center space-x-1">
                                 <button @click="openConstraints(emp)" class="text-gray-500 hover:text-gray-800 text-xs font-bold border border-gray-200 px-2 py-1 rounded">Rules</button>
                                 <button @click="updateItem('employees', emp.id, emp.name, emp.priority)" class="text-blue-500 hover:text-blue-700 text-xs font-bold border border-blue-200 px-2 py-1 rounded">Edit</button>
@@ -388,7 +393,6 @@
                 };
                 const updateItem = async (type, id, oldName, oldPrio) => { 
                     const newName = prompt("Rename:", oldName); if (!newName) return; 
-                    // No need to prompt priority, it's handled by updatePriority now
                     let body = { name: newName, priority: oldPrio || 4 };
                     await fetch(`/api/${type}/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }); 
                     fetchData(); 
