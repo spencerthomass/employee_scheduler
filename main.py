@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, status, UploadFile, File
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session, select, delete, or_
+from sqlmodel import Session, select, delete, or_, text
 from database import engine, create_db_and_tables, seed_data, Employee, Location, Shift, LocationConstraint, EmployeeConstraint, LocationPreference, EmployeeUnavailableDay, EmployeeTargetDays, WeekStatus, EmployeeCoworkerPreference, LocationTarget
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import os
+import json
 
 app = FastAPI()
 
@@ -28,11 +30,79 @@ class MoveRequest(BaseModel): employee_id: int; date_str: str; location_id: int
 class DeleteRequest(BaseModel): employee_id: int; date_str: str
 class NameRequest(BaseModel): name: str
 class ConstraintRequest(BaseModel): employee_id: int; target_id: int 
-class LocationTargetRequest(BaseModel): location_id: int; min_employees: int; max_employees: int
+class LocationTargetRequest(BaseModel): location_id: int; target_count: int
 class PublishRequest(BaseModel): week_start: str
 class AutoFillRequest(BaseModel): week_start: str; mode: str
+# NEW: Export Request
+class ExportRequest(BaseModel): tables: list[str]
 
-# --- Public Routes ---
+# --- Helper to map string names to SQLModel classes ---
+TABLE_MAP = {
+    "employees": Employee,
+    "locations": Location,
+    "shifts": Shift,
+    "location_constraints": LocationConstraint,
+    "employee_constraints": EmployeeConstraint,
+    "location_preferences": LocationPreference,
+    "coworker_preferences": EmployeeCoworkerPreference,
+    "unavailable_days": EmployeeUnavailableDay,
+    "employee_target_days": EmployeeTargetDays,
+    "location_targets": LocationTarget,
+    "week_status": WeekStatus
+}
+
+# --- Backup/Restore Routes (NEW) ---
+
+@app.post("/api/backup/export", dependencies=[Depends(get_current_admin)])
+def export_data(req: ExportRequest):
+    data = {}
+    with Session(engine) as session:
+        for table_name in req.tables:
+            if table_name in TABLE_MAP:
+                model = TABLE_MAP[table_name]
+                results = session.exec(select(model)).all()
+                # Convert list of SQLModels to list of dicts
+                data[table_name] = [row.dict() for row in results]
+    
+    return data
+
+@app.post("/api/backup/import", dependencies=[Depends(get_current_admin)])
+async def import_data(request: Request):
+    # Parse JSON body directly
+    try:
+        data = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    with Session(engine) as session:
+        # Disable Foreign Key checks for MySQL to allow arbitrary insert order
+        session.exec(text("SET FOREIGN_KEY_CHECKS=0"))
+        
+        try:
+            for table_name, rows in data.items():
+                if table_name in TABLE_MAP and rows:
+                    model = TABLE_MAP[table_name]
+                    
+                    # 1. Clear existing data for this table
+                    session.exec(delete(model))
+                    
+                    # 2. Insert new data
+                    for row in rows:
+                        # Validate and create instance
+                        try:
+                            obj = model.model_validate(row)
+                            session.add(obj)
+                        except Exception as e:
+                            print(f"Skipping invalid row in {table_name}: {e}")
+                            
+            session.commit()
+        finally:
+            # Re-enable Foreign Keys
+            session.exec(text("SET FOREIGN_KEY_CHECKS=1"))
+            
+    return {"status": "ok", "message": "Import successful"}
+
+# --- Existing Routes (Unchanged) ---
 
 @app.get("/api/roster/{start_date_str}")
 def get_roster_state(start_date_str: str, request: Request):
@@ -60,7 +130,7 @@ def get_roster_state(start_date_str: str, request: Request):
         coworker_preferences = session.exec(select(EmployeeCoworkerPreference)).all()
         
         location_targets_db = session.exec(select(LocationTarget)).all()
-        location_targets = {lt.location_id: {"min": lt.min_employees, "max": lt.max_employees} for lt in location_targets_db}
+        location_targets = {lt.location_id: lt.target_count for lt in location_targets_db}
 
         constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "preferred_coworkers": [], "bad_days": [], "target_days": None} for e in employees}
         
@@ -108,6 +178,8 @@ def login(req: LoginRequest, response: Response):
 def logout(response: Response):
     response.delete_cookie("admin_token")
     return {"status": "ok"}
+
+# --- Protected Routes ---
 
 @app.post("/api/assign", dependencies=[Depends(get_current_admin)])
 def assign_shift(req: MoveRequest):
@@ -179,6 +251,7 @@ def autofill_schedule(req: AutoFillRequest):
         session.commit()
     return {"status": "ok"}
 
+# --- Management Routes ---
 @app.post("/api/employees", dependencies=[Depends(get_current_admin)])
 def add_employee(req: NameRequest):
     with Session(engine) as session: session.add(Employee(name=req.name)); session.commit()
@@ -196,7 +269,7 @@ def delete_employee(id: int):
         session.exec(delete(LocationConstraint).where(LocationConstraint.employee_id == id))
         session.exec(delete(EmployeeConstraint).where(or_(EmployeeConstraint.employee_id == id, EmployeeConstraint.target_employee_id == id)))
         session.exec(delete(LocationPreference).where(LocationPreference.employee_id == id))
-        session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id == id)) 
+        session.exec(delete(EmployeeCoworkerPreference).where(EmployeeCoworkerPreference.employee_id == id))
         session.exec(delete(EmployeeUnavailableDay).where(EmployeeUnavailableDay.employee_id == id))
         session.exec(delete(EmployeeTargetDays).where(EmployeeTargetDays.employee_id == id))
         session.exec(delete(Employee).where(Employee.id == id))
@@ -291,8 +364,8 @@ def remove_emp_preference(req: ConstraintRequest):
 def set_location_target(req: LocationTargetRequest):
     with Session(engine) as session:
         existing = session.exec(select(LocationTarget).where(LocationTarget.location_id == req.location_id)).first()
-        if existing: existing.min_employees = req.min_employees; existing.max_employees = req.max_employees; session.add(existing)
-        else: session.add(LocationTarget(location_id=req.location_id, min_employees=req.min_employees, max_employees=req.max_employees))
+        if existing: existing.target_count = req.target_count; session.add(existing)
+        else: session.add(LocationTarget(location_id=req.location_id, target_count=req.target_count))
         session.commit()
     return {"status": "ok"}
 
