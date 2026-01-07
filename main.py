@@ -90,8 +90,22 @@ def get_roster_state(start_date_str: str, request: Request):
         published_at = status_entry.published_at if status_entry else None
 
         employees = session.exec(select(Employee).where(Employee.active == True).order_by(Employee.name)).all()
-        locations = session.exec(select(Location).order_by(Location.name)).all()
         
+        # 1. Fetch raw locations (alphabetical first)
+        locations_unsorted = session.exec(select(Location).order_by(Location.name)).all()
+        
+        # 2. Fetch targets
+        location_targets_db = session.exec(select(LocationTarget)).all()
+        
+        # 3. Create a map for sorting: LocationID -> Max Employees
+        target_map = {lt.location_id: lt.max_employees for lt in location_targets_db}
+        
+        # 4. Sort locations by Max Target (Descending), then by Name (Alphabetical)
+        locations = sorted(locations_unsorted, key=lambda l: target_map.get(l.id, 0), reverse=True)
+        
+        # Prepare targets dictionary for frontend
+        location_targets = {lt.location_id: {"min": lt.min_employees, "max": lt.max_employees} for lt in location_targets_db}
+
         shifts = []
         if is_admin or is_published:
             shifts = session.exec(select(Shift).where(Shift.date_str >= week_dates[0], Shift.date_str <= week_dates[-1])).all()
@@ -102,9 +116,6 @@ def get_roster_state(start_date_str: str, request: Request):
         day_constraints = session.exec(select(EmployeeUnavailableDay)).all()
         target_days = session.exec(select(EmployeeTargetDays)).all()
         coworker_preferences = session.exec(select(EmployeeCoworkerPreference)).all()
-        
-        location_targets_db = session.exec(select(LocationTarget)).all()
-        location_targets = {lt.location_id: {"min": lt.min_employees, "max": lt.max_employees} for lt in location_targets_db}
 
         constraints = {e.id: {"bad_locs": [], "bad_coworkers": [], "preferred_locs": [], "preferred_coworkers": [], "bad_days": [], "target_days": None} for e in employees}
         
@@ -209,7 +220,6 @@ def autofill_schedule(req: AutoFillRequest):
             pref_map = {e.id: [] for e in employees}
             for p in session.exec(select(LocationPreference)).all(): pref_map[p.employee_id].append(p.location_id)
             
-            # Reverse pref map: Loc ID -> List of Employees who prefer it
             loc_preferred_by = {l.id: [] for l in locations}
             for emp_id, loc_ids in pref_map.items():
                 for lid in loc_ids:
@@ -232,7 +242,6 @@ def autofill_schedule(req: AutoFillRequest):
             loc_day_counts = {} 
             emp_working_today = {}
 
-            # Helper Functions
             def is_available(emp_id, date_str, day_idx, loc_id):
                 if emp_days_assigned[emp_id] >= emp_targets[emp_id]["max"]: return False
                 if day_idx in bad_days[emp_id]: return False
@@ -247,41 +256,30 @@ def autofill_schedule(req: AutoFillRequest):
                 loc_day_counts[key] = loc_day_counts.get(key, 0) + 1
                 emp_working_today[f"{emp_id}_{date_str}"] = True
 
-            # --- RANDOMIZE DAYS to prevent Monday bias ---
             day_indices = list(range(6))
             random.shuffle(day_indices)
+            employees.sort(key=lambda x: x.priority) 
 
-            # ============================================================
-            # PHASE 1: THE ANCHOR (Ensure 1 Preferred Employee per Shop)
-            # ============================================================
+            # PHASE 1: THE ANCHOR
             for i in day_indices:
                 date_str = week_dates[i]
                 shuffled_locs = list(locations)
                 random.shuffle(shuffled_locs)
 
                 for loc in shuffled_locs:
-                    # Is there someone who prefers this shop assigned yet?
-                    # Check current assignments for this location/day... wait, we haven't assigned anyone yet.
-                    # We need to find ONE person who prefers this shop and assign them.
-                    
                     potential_anchors = []
-                    # Get employees who prefer this shop
                     fan_ids = loc_preferred_by.get(loc.id, [])
-                    
                     for emp_id in fan_ids:
                         emp = next((e for e in employees if e.id == emp_id), None)
                         if emp and is_available(emp.id, date_str, i, loc.id):
-                            score = (5 - emp.priority) * 100 # Priority 1 = 400 points
+                            score = (5 - emp.priority) * 100 
                             score += random.random()
                             potential_anchors.append((score, emp))
-                    
                     if potential_anchors:
                         potential_anchors.sort(key=lambda x: x[0], reverse=True)
                         assign(potential_anchors[0][1].id, loc.id, date_str)
 
-            # ============================================================
-            # PHASE 2: SHOP MINIMUMS (Fill holes with best available)
-            # ============================================================
+            # PHASE 2: SHOP MINIMUMS
             for i in day_indices:
                 date_str = week_dates[i]
                 shuffled_locs = list(locations)
@@ -290,43 +288,35 @@ def autofill_schedule(req: AutoFillRequest):
                 for loc in shuffled_locs:
                     min_req = loc_min_max[loc.id]["min"]
                     current = loc_day_counts.get(f"{loc.id}_{date_str}", 0)
-                    
                     while current < min_req:
                         candidates = []
                         for emp in employees:
                             if is_available(emp.id, date_str, i, loc.id):
                                 score = 0
-                                score += (5 - emp.priority) * 50 # Priority Weight
-                                if loc.id in pref_map[emp.id]: score += 20 # Preference Weight
-                                if emp_days_assigned[emp.id] < emp_targets[emp.id]["min"]: score += 30 # Need Hours Weight
+                                score += (5 - emp.priority) * 50 
+                                if loc.id in pref_map[emp.id]: score += 20 
+                                if emp_days_assigned[emp.id] < emp_targets[emp.id]["min"]: score += 30 
                                 score += random.random()
                                 candidates.append((score, emp))
-                        
                         if not candidates: break
                         candidates.sort(key=lambda x: x[0], reverse=True)
                         assign(candidates[0][1].id, loc.id, date_str)
                         current += 1
 
-            # ============================================================
-            # PHASE 3: EMPLOYEE HOURS (Ensure min days met)
-            # ============================================================
+            # PHASE 3: EMPLOYEE HOURS
             needy_employees = [e for e in employees if emp_days_assigned[e.id] < emp_targets[e.id]["min"]]
-            # Sort by priority so P1 gets filled first
             needy_employees.sort(key=lambda x: x.priority)
 
             for emp in needy_employees:
                 needed = emp_targets[emp.id]["min"] - emp_days_assigned[emp.id]
-                
                 for i in day_indices:
                     if needed <= 0: break
                     date_str = week_dates[i]
                     if emp_working_today.get(f"{emp.id}_{date_str}", False): continue
                     if i in bad_days[emp.id]: continue
 
-                    # Find a shop with space (under MAX)
                     best_loc = None
                     best_score = -1
-                    
                     shuffled_locs = list(locations)
                     random.shuffle(shuffled_locs)
 
