@@ -7,60 +7,67 @@
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
 
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        tr.emp-row { height: 30px; }
+        tr.emp-row { height: 34px; }
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
         .col-name { width: 200px; min-width: 200px; }
         .col-day { width: 120px; min-width: 120px; }
         .col-total { width: 80px; min-width: 80px; }
+        
+        /* Custom Select Styling */
+        select.shift-select {
+            appearance: none;
+            background-color: transparent;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            text-align-last: center;
+            cursor: pointer;
+            border: none;
+            outline: none;
+            font-weight: 700;
+            color: #374151;
+        }
+        select.shift-select:hover { background-color: rgba(0,0,0,0.02); }
     </style>
 </head>
 <body class="bg-gray-100 h-screen overflow-hidden text-xs">
     <div id="app" class="flex flex-col md:flex-row h-full font-sans">
         
         <div v-if="isAdmin" class="w-full h-80 md:w-56 md:h-auto bg-white shadow-xl flex flex-col z-20 border-b md:border-b-0 md:border-r border-gray-300 transition-all shrink-0">
-            <div class="p-4 bg-gray-800 text-white font-bold flex justify-between items-center shrink-0">
-                <div>Admin Tools<div class="text-[10px] font-normal text-gray-400 mt-1">Drag shops to grid</div></div>
-                <div class="md:hidden text-xs text-gray-400">(Scroll)</div>
+            <div class="p-4 bg-gray-800 text-white font-bold flex flex-col justify-center items-center shrink-0 h-24">
+                <div class="text-lg">Admin Tools</div>
             </div>
             
-            <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
-                <div v-for="loc in locations" :key="loc.id" draggable="true" @dragstart="onDragStart($event, loc.id)" 
-                     :class="getLocColor(loc.id)"
-                     class="p-2 mb-2 rounded shadow-sm border cursor-move hover:brightness-95 transition-all select-none touch-manipulation">
-                    <div class="font-bold truncate">{{ loc.name }}</div>
-                </div>
-            </div>
-            
-            <div class="p-3 bg-gray-100 border-t flex flex-col space-y-2 shrink-0">
-                <button @click="showModal('autofill')" class="w-full py-1.5 bg-purple-600 text-white rounded font-bold hover:bg-purple-700 shadow text-center text-xs">✨ Auto-Fill</button>
-                <button @click="clearSchedule" class="w-full py-1.5 bg-red-600 text-white rounded font-bold hover:bg-red-700 shadow text-center text-xs">🗑️ Clear Week</button>
-                <button @click="showModal('backup')" class="w-full py-1.5 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 shadow text-center text-xs">💾 Backup / Restore</button>
-                <div class="grid grid-cols-2 gap-2">
-                    <button @click="showModal('staff')" class="py-1.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow text-center text-xs">Staff</button>
-                    <button @click="showModal('shops')" class="py-1.5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow text-center text-xs">Shops</button>
-                </div>
+            <div class="flex-1 overflow-y-auto p-3 bg-gray-50 flex flex-col gap-2">
+                <button @click="showModal('autofill')" class="w-full py-3 bg-purple-600 text-white rounded font-bold hover:bg-purple-700 shadow text-center">✨ Auto-Fill</button>
+                <button @click="clearSchedule" class="w-full py-3 bg-red-600 text-white rounded font-bold hover:bg-red-700 shadow text-center">🗑️ Clear Week</button>
+                <button @click="showModal('backup')" class="w-full py-3 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 shadow text-center">💾 Backup / Restore</button>
+                
+                <div class="h-px bg-gray-300 my-2"></div>
+                
+                <button @click="showModal('staff')" class="w-full py-3 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow text-center">Manage Staff</button>
+                <button @click="showModal('shops')" class="w-full py-3 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow text-center">Manage Shops</button>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
             
-            <div class="bg-white border-b p-2 flex justify-between items-center shadow-sm z-10 shrink-0 gap-2 overflow-x-auto h-12">
+            <div class="bg-white border-b p-2 flex justify-between items-center shadow-sm z-10 shrink-0 gap-2 overflow-x-auto h-14">
                 <div class="flex items-center space-x-2 md:space-x-4">
                     <div class="flex items-center shrink-0">
-                        <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" alt="Emissions Plus" class="h-6 md:h-8 mr-2">
-                        <span class="text-gray-700 font-extrabold text-base tracking-tight hidden md:block">Scheduler</span>
+                        <img src="https://emissions-plus.com/wp-content/uploads/2018/10/cropped-eplus-logo-1.png" alt="Emissions Plus" class="h-8 md:h-10 mr-2">
+                        <span class="text-gray-700 font-extrabold text-lg tracking-tight hidden md:block">Scheduler</span>
                     </div>
 
                     <div class="flex items-center bg-gray-100 rounded-lg p-0.5 border shrink-0">
-                        <button @click="changeWeek(-7)" class="w-6 h-6 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold">&lt;</button>
-                        <span class="px-2 font-bold text-gray-700 text-xs whitespace-nowrap">{{ formatDateReadable(weekDates[0]) }}</span>
-                        <button @click="changeWeek(7)" class="w-6 h-6 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold">&gt;</button>
+                        <button @click="changeWeek(-7)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold text-lg">&lt;</button>
+                        <span class="px-3 font-bold text-gray-700 text-sm whitespace-nowrap">{{ formatDateReadable(weekDates[0]) }}</span>
+                        <button @click="changeWeek(7)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded text-gray-600 font-bold text-lg">&gt;</button>
                     </div>
                 </div>
                 
@@ -69,9 +76,9 @@
                         <div v-if="isPublished" class="text-[10px] text-green-600 font-bold">Published {{ formatTime(publishedAt) }}</div>
                         <div v-else class="text-[10px] text-red-500 font-bold">Draft Mode</div>
                     </div>
-                    <button v-if="isAdmin" @click="publishSchedule" :class="isPublished ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300'" class="px-2 py-1 rounded border font-bold text-[10px] uppercase tracking-wide hover:brightness-95">{{ isPublished ? 'Republish' : 'Publish' }}</button>
-                    <div class="h-4 w-px bg-gray-300 hidden md:block"></div>
-                    <label class="hidden md:flex items-center space-x-1 cursor-pointer select-none"><input type="checkbox" v-model="showCoverage" class="form-checkbox h-3 w-3 text-indigo-600"><span class="text-gray-600 font-bold text-[10px]">Counts</span></label>
+                    <button v-if="isAdmin" @click="publishSchedule" :class="isPublished ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300'" class="px-3 py-1.5 rounded border font-bold text-xs uppercase tracking-wide hover:brightness-95">{{ isPublished ? 'Republish' : 'Publish' }}</button>
+                    <div class="h-6 w-px bg-gray-300 hidden md:block"></div>
+                    <label class="hidden md:flex items-center space-x-1 cursor-pointer select-none"><input type="checkbox" v-model="showCoverage" class="form-checkbox h-4 w-4 text-indigo-600"><span class="text-gray-600 font-bold text-xs">Counts</span></label>
                     <button v-if="!isAdmin" @click="showModal('login')" class="text-indigo-600 hover:underline font-bold px-2 text-xs">Admin Login</button>
                     <button v-else @click="logout" class="text-red-600 hover:underline px-2 text-xs">Logout</button>
                 </div>
@@ -80,8 +87,8 @@
             <div class="flex-1 overflow-auto bg-gray-50 flex flex-col relative">
                 
                 <div v-if="!isAdmin && !isPublished" class="absolute inset-0 z-50 bg-gray-100 flex flex-col items-center justify-center">
-                    <div class="text-4xl mb-2">🚧</div>
-                    <h2 class="text-xl font-bold text-gray-700">Schedule Not Posted</h2>
+                    <div class="text-6xl mb-4">🚧</div>
+                    <h2 class="text-2xl font-bold text-gray-700">Schedule Not Posted</h2>
                     <p class="text-gray-500">The schedule for this week is still being worked on.</p>
                 </div>
 
@@ -110,24 +117,30 @@
                             <tr v-for="emp in employees" :key="emp.id" class="emp-row bg-white hover:bg-gray-50 transition-colors">
                                 <td class="col-name px-2 py-0.5 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
                                     <div class="flex items-center">
-                                        <div class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[9px] mr-2 shrink-0">{{ getInitials(emp.name) }}</div>
+                                        <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[10px] mr-2 shrink-0">{{ getInitials(emp.name) }}</div>
                                         <span class="truncate">{{ emp.name }}</span>
                                     </div>
                                 </td>
-                                <td v-for="date in weekDates" :key="date" @dragover.prevent @drop="onDrop($event, emp.id, date)" class="col-day border-r border-b p-0.5 text-center relative group touch-manipulation">
-                                    <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-[10px] select-none">-</div>
-                                    <div v-if="grid[emp.id][date]" 
-                                         :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : getLocColor(grid[emp.id][date].id)"
-                                         class="mx-0.5 py-0.5 rounded text-[10px] font-bold shadow-sm flex justify-between items-center px-1 group/cell cursor-default border transition-colors select-none h-full" 
-                                         :title="getWarning(emp.id, date)">
+                                
+                                <td v-for="date in weekDates" :key="date" class="col-day border-r border-b p-0 text-center relative group">
+                                    
+                                    <div v-if="isAdmin" class="w-full h-full relative">
+                                        <select class="shift-select" 
+                                                :class="getShiftClass(emp.id, date)"
+                                                :value="grid[emp.id][date]?.id || ''" 
+                                                @change="onShiftChange(emp.id, date, $event.target.value)">
+                                            <option value="">-</option>
+                                            <option v-for="loc in locations" :key="loc.id" :value="loc.id">{{ loc.name }}</option>
+                                        </select>
                                         
-                                        <div class="flex items-center truncate w-full">
-                                            <span v-if="getWarning(emp.id, date)" class="mr-1 text-xs">⚠️</span>
-                                            <span class="truncate">{{ grid[emp.id][date].name }}</span>
-                                        </div>
-                                        <button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-gray-500 hover:text-red-600 font-bold ml-1">&times;</button>
+                                        <div v-if="getWarning(emp.id, date)" class="absolute top-0 right-0 text-[10px] pointer-events-none pr-1 pt-1" title="Conflict">⚠️</div>
+                                    </div>
+
+                                    <div v-else class="w-full h-full flex items-center justify-center font-bold text-gray-700">
+                                        {{ grid[emp.id][date]?.name || '-' }}
                                     </div>
                                 </td>
+
                                 <td class="col-total border-b text-center font-bold relative group/total text-xs" :class="totalClass(emp.id)">
                                     {{ countDays(emp.id) }}
                                     <div v-if="constraints[emp.id].target_days" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/total:opacity-100 pointer-events-none whitespace-nowrap z-50">Target: {{ constraints[emp.id].target_days.min }}-{{ constraints[emp.id].target_days.max }} days</div>
@@ -281,15 +294,6 @@
                 const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref(""); const newItemPriority = ref(4);
                 const selectedEmp = ref(null);
                 
-                const colorPalette = [
-                    'bg-red-100 text-red-800 border-red-200', 'bg-orange-100 text-orange-800 border-orange-200', 'bg-amber-100 text-amber-800 border-amber-200',
-                    'bg-green-100 text-green-800 border-green-200', 'bg-emerald-100 text-emerald-800 border-emerald-200', 'bg-teal-100 text-teal-800 border-teal-200',
-                    'bg-cyan-100 text-cyan-800 border-cyan-200', 'bg-sky-100 text-sky-800 border-sky-200', 'bg-blue-100 text-blue-800 border-blue-200',
-                    'bg-indigo-100 text-indigo-800 border-indigo-200', 'bg-violet-100 text-violet-800 border-violet-200', 'bg-purple-100 text-purple-800 border-purple-200',
-                    'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200', 'bg-pink-100 text-pink-800 border-pink-200', 'bg-rose-100 text-rose-800 border-rose-200'
-                ];
-                const getLocColor = (id) => colorPalette[id % colorPalette.length];
-
                 // BACKUP VARS
                 const backupMode = ref('export');
                 const exportTables = ref(['employees','locations','shifts','location_constraints','location_preferences','employee_constraints','coworker_preferences','unavailable_days','employee_target_days','location_targets','week_status']);
@@ -300,7 +304,6 @@
                     const res = await fetch(`/api/roster/${currentMonday.value}`);
                     const data = await res.json();
                     employees.value = data.employees.sort((a,b) => a.name.localeCompare(b.name));
-                    // UPDATED: No sorting for locations here; respect backend sort order
                     locations.value = data.locations; 
                     weekDates.value = data.week_dates; grid.value = data.grid;
                     constraints.value = data.constraints; isAdmin.value = data.is_admin;
@@ -427,6 +430,35 @@
 
                 const deleteItem = async (type, id) => { if(!confirm("Are you sure?")) return; await fetch(`/api/${type}/${id}`, { method: 'DELETE' }); fetchData(); };
                 
+                // --- NEW: ON SHIFT CHANGE (Assign/Remove) ---
+                const onShiftChange = async (empId, date, locId) => {
+                    if (locId) {
+                        grid.value[empId][date] = locations.value.find(l => l.id == locId); // Optimistic UI
+                        await fetch('/api/assign', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ employee_id: empId, date_str: date, location_id: parseInt(locId) })
+                        });
+                    } else {
+                        grid.value[empId][date] = null;
+                        await fetch('/api/remove', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ employee_id: empId, date_str: date })
+                        });
+                    }
+                };
+                
+                // --- NEW: Color helper for cells ---
+                // Returns class if assigned, else empty string
+                const getShiftClass = (empId, date) => {
+                    const shift = grid.value[empId][date];
+                    if (!shift) return 'text-gray-300'; // Empty state
+                    
+                    if (getWarning(empId, date)) return 'bg-yellow-100 text-yellow-900 border-yellow-300';
+                    return 'bg-white text-gray-900'; // Normal filled state
+                };
+
                 const onDragStart = (evt, locId) => { evt.dataTransfer.effectAllowed = 'copy'; evt.dataTransfer.setData('locId', locId); };
                 const onDrop = async (evt, empId, dateStr) => { if(!isAdmin.value) return; const locId = evt.dataTransfer.getData('locId'); if (!locId) return; const loc = locations.value.find(l => l.id == locId); grid.value[empId][dateStr] = loc; await fetch('/api/assign', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, date_str: dateStr, location_id: parseInt(locId) }) }); };
                 const removeShift = async (empId, dateStr) => { grid.value[empId][dateStr] = null; await fetch('/api/remove', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ employee_id: empId, date_str: dateStr }) }); };
@@ -446,7 +478,9 @@
                     currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage, constraints, isPublished, publishedAt, locationTargets,
                     modalMode, passwordInput, newItemName, newItemPriority, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
                     fetchData, changeWeek, login, logout, createItem, updateItem, updatePriority, deleteItem, publishSchedule, runAutoFill, clearSchedule, setLocTarget, getCoverageClass,
-                    onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime, getLocColor,
+                    onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime,
+                    // New Dropdown Logic
+                    onShiftChange, getShiftClass,
                     // Backup
                     backupMode, exportTables, importData, importTables, doExport, onFileChange, doImport,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
