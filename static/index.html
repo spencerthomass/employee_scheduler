@@ -12,37 +12,36 @@
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* UPDATED: Compact Row Height (30px) */
         tr.emp-row { height: 30px; }
-        
         td { border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
         .modal-mask { position: fixed; z-index: 50; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
         .col-name { width: 200px; min-width: 200px; }
         .col-day { width: 120px; min-width: 120px; }
-        .col-total { width: 60px; min-width: 60px; }
+        .col-total { width: 80px; min-width: 80px; }
     </style>
 </head>
 <body class="bg-gray-100 h-screen overflow-hidden text-xs">
     <div id="app" class="flex flex-col md:flex-row h-full font-sans">
         
-        <div v-if="isAdmin" class="w-full h-80 md:w-52 md:h-auto bg-white shadow-xl flex flex-col z-20 border-b md:border-b-0 md:border-r border-gray-300 transition-all shrink-0">
-            <div class="p-3 bg-gray-800 text-white font-bold flex justify-between items-center shrink-0">
-                <div>Admin Tools<div class="text-[10px] font-normal text-gray-400">Drag shops to grid</div></div>
+        <div v-if="isAdmin" class="w-full h-80 md:w-56 md:h-auto bg-white shadow-xl flex flex-col z-20 border-b md:border-b-0 md:border-r border-gray-300 transition-all shrink-0">
+            <div class="p-4 bg-gray-800 text-white font-bold flex justify-between items-center shrink-0">
+                <div>Admin Tools<div class="text-[10px] font-normal text-gray-400 mt-1">Drag shops to grid</div></div>
                 <div class="md:hidden text-xs text-gray-400">(Scroll)</div>
             </div>
             
-            <div class="flex-1 overflow-y-auto p-2 bg-gray-50">
-                <div v-for="loc in locations" :key="loc.id" draggable="true" @dragstart="onDragStart($event, loc.id)" class="bg-white p-2 mb-2 rounded shadow-sm border-l-4 border-indigo-500 cursor-move hover:bg-indigo-50 transition-all select-none touch-manipulation">
-                    <div class="font-bold text-gray-700 truncate">{{ loc.name }}</div>
+            <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
+                <div v-for="loc in locations" :key="loc.id" draggable="true" @dragstart="onDragStart($event, loc.id)" 
+                     :class="getLocColor(loc.id)"
+                     class="p-2 mb-2 rounded shadow-sm border cursor-move hover:brightness-95 transition-all select-none touch-manipulation">
+                    <div class="font-bold truncate">{{ loc.name }}</div>
                 </div>
             </div>
             
-            <div class="p-2 bg-gray-100 border-t flex flex-col space-y-2 shrink-0">
+            <div class="p-3 bg-gray-100 border-t flex flex-col space-y-2 shrink-0">
                 <button @click="showModal('autofill')" class="w-full py-1.5 bg-purple-600 text-white rounded font-bold hover:bg-purple-700 shadow text-center text-xs">✨ Auto-Fill</button>
                 <button @click="clearSchedule" class="w-full py-1.5 bg-red-600 text-white rounded font-bold hover:bg-red-700 shadow text-center text-xs">🗑️ Clear Week</button>
-                <button @click="showModal('backup')" class="w-full py-1.5 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 shadow text-center text-xs">💾 Backup</button>
-                <div class="grid grid-cols-2 gap-1">
+                <button @click="showModal('backup')" class="w-full py-1.5 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 shadow text-center text-xs">💾 Backup / Restore</button>
+                <div class="grid grid-cols-2 gap-2">
                     <button @click="showModal('staff')" class="py-1.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow text-center text-xs">Staff</button>
                     <button @click="showModal('shops')" class="py-1.5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow text-center text-xs">Shops</button>
                 </div>
@@ -117,12 +116,17 @@
                                 </td>
                                 <td v-for="date in weekDates" :key="date" @dragover.prevent @drop="onDrop($event, emp.id, date)" class="col-day border-r border-b p-0.5 text-center relative group touch-manipulation">
                                     <div v-if="!grid[emp.id][date]" class="h-full flex items-center justify-center text-gray-200 text-[10px] select-none">-</div>
-                                    <div v-if="grid[emp.id][date]" :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-indigo-100 text-indigo-800 border-indigo-100'" class="mx-0.5 py-0.5 rounded text-[10px] font-bold shadow-sm flex justify-between items-center px-1 group/cell cursor-default border transition-colors select-none h-full" :title="getWarning(emp.id, date)">
+                                    
+                                    <div v-if="grid[emp.id][date]" 
+                                         :class="getWarning(emp.id, date) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : getLocColor(grid[emp.id][date].id)"
+                                         class="mx-0.5 py-0.5 rounded text-[10px] font-bold shadow-sm flex justify-between items-center px-1 group/cell cursor-default border transition-colors select-none h-full" 
+                                         :title="getWarning(emp.id, date)">
+                                        
                                         <div class="flex items-center truncate w-full">
                                             <span v-if="getWarning(emp.id, date)" class="mr-1 text-xs">⚠️</span>
                                             <span class="truncate">{{ grid[emp.id][date].name }}</span>
                                         </div>
-                                        <button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-indigo-400 hover:text-red-500 font-bold ml-1">&times;</button>
+                                        <button v-if="isAdmin" @click="removeShift(emp.id, date)" class="hidden group-hover/cell:block text-gray-500 hover:text-red-600 font-bold ml-1">&times;</button>
                                     </div>
                                 </td>
                                 <td class="col-total border-b text-center font-bold relative group/total text-xs" :class="totalClass(emp.id)">
@@ -238,15 +242,9 @@
                         <p class="text-xs text-gray-500">Set Preferences and Restrictions.</p>
                         <div class="flex items-center space-x-2 bg-blue-50 p-2 rounded border border-blue-100">
                             <span class="text-sm font-bold text-blue-800">Target Days/Week:</span>
-                            <input type="number" min="0" max="7" 
-                                   :value="constraints[selectedEmp.id].target_days?.min || 0"
-                                   @change="setTargetDays($event.target.value, constraints[selectedEmp.id].target_days?.max)"
-                                   class="w-10 border p-1 rounded text-center font-mono text-xs">
+                            <input type="number" min="0" max="7" :value="constraints[selectedEmp.id].target_days?.min || 0" @change="setTargetDays($event.target.value, constraints[selectedEmp.id].target_days?.max)" class="w-10 border p-1 rounded text-center font-mono text-xs">
                             <span class="text-gray-400">-</span>
-                            <input type="number" min="0" max="7" 
-                                   :value="constraints[selectedEmp.id].target_days?.max || 7"
-                                   @change="setTargetDays(constraints[selectedEmp.id].target_days?.min, $event.target.value)"
-                                   class="w-10 border p-1 rounded text-center font-mono text-xs">
+                            <input type="number" min="0" max="7" :value="constraints[selectedEmp.id].target_days?.max || 7" @change="setTargetDays(constraints[selectedEmp.id].target_days?.min, $event.target.value)" class="w-10 border p-1 rounded text-center font-mono text-xs">
                         </div>
                     </div>
                     <div class="flex space-x-4 flex-1 overflow-hidden">
@@ -278,6 +276,16 @@
                 const modalMode = ref(null); const passwordInput = ref(""); const newItemName = ref(""); const newItemPriority = ref(4);
                 const selectedEmp = ref(null);
                 
+                // Palette for Shops (15 distinct pastels)
+                const colorPalette = [
+                    'bg-red-100 text-red-800 border-red-200', 'bg-orange-100 text-orange-800 border-orange-200', 'bg-amber-100 text-amber-800 border-amber-200',
+                    'bg-green-100 text-green-800 border-green-200', 'bg-emerald-100 text-emerald-800 border-emerald-200', 'bg-teal-100 text-teal-800 border-teal-200',
+                    'bg-cyan-100 text-cyan-800 border-cyan-200', 'bg-sky-100 text-sky-800 border-sky-200', 'bg-blue-100 text-blue-800 border-blue-200',
+                    'bg-indigo-100 text-indigo-800 border-indigo-200', 'bg-violet-100 text-violet-800 border-violet-200', 'bg-purple-100 text-purple-800 border-purple-200',
+                    'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200', 'bg-pink-100 text-pink-800 border-pink-200', 'bg-rose-100 text-rose-800 border-rose-200'
+                ];
+                const getLocColor = (id) => colorPalette[id % colorPalette.length];
+
                 // BACKUP VARS
                 const backupMode = ref('export');
                 const exportTables = ref(['employees','locations','shifts','location_constraints','location_preferences','employee_constraints','coworker_preferences','unavailable_days','employee_target_days','location_targets','week_status']);
@@ -405,12 +413,11 @@
                     fetchData(); 
                 };
                 
-                // NEW: Update Priority Directly
                 const updatePriority = async (emp, newPrio) => {
                     const val = parseInt(newPrio);
-                    emp.priority = val; // Optimistic update
+                    emp.priority = val; 
                     await fetch(`/api/employees/${emp.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: emp.name, priority: val }) });
-                    fetchData(); // Refresh to re-sort
+                    fetchData(); 
                 };
 
                 const deleteItem = async (type, id) => { if(!confirm("Are you sure?")) return; await fetch(`/api/${type}/${id}`, { method: 'DELETE' }); fetchData(); };
@@ -434,7 +441,7 @@
                     currentMonday, employees, locations, weekDates, grid, isAdmin, showCoverage, constraints, isPublished, publishedAt, locationTargets,
                     modalMode, passwordInput, newItemName, newItemPriority, selectedEmp, showModal, openConstraints, toggleConstraint, setTargetDays, totalClass,
                     fetchData, changeWeek, login, logout, createItem, updateItem, updatePriority, deleteItem, publishSchedule, runAutoFill, clearSchedule, setLocTarget, getCoverageClass,
-                    onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime,
+                    onDragStart, onDrop, removeShift, getShopCount, getWarning, formatTime, getLocColor,
                     // Backup
                     backupMode, exportTables, importData, importTables, doExport, onFileChange, doImport,
                     getDayName, formatDateShort, formatDateReadable, countDays, getInitials
