@@ -95,10 +95,16 @@
                 <div v-if="showCoverage" class="bg-white border-b-4 border-gray-200 p-2 shadow-sm shrink-0 overflow-x-auto">
                     <h2 class="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Shop Coverage</h2>
                     <table class="w-full border-collapse text-[10px]">
-                        <thead><tr><th class="col-name text-left p-1 text-gray-400">Location</th><th v-for="date in weekDates" :key="date" class="col-day text-center p-1 text-gray-400">{{ getDayName(date) }}</th><th class="col-total"></th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th class="col-name text-left p-1 text-gray-400 sticky left-0 bg-white z-20 border-r shadow-sm">Location</th>
+                                <th v-for="date in weekDates" :key="date" class="col-day text-center p-1 text-gray-400">{{ getDayName(date) }}</th>
+                                <th class="col-total"></th>
+                            </tr>
+                        </thead>
                         <tbody>
                             <tr v-for="loc in locations" :key="loc.id" class="border-b border-gray-100">
-                                <td class="col-name p-1 font-bold text-gray-700">{{ loc.name }}</td>
+                                <td class="col-name p-1 font-bold text-gray-700 sticky left-0 bg-white z-10 border-r shadow-sm">{{ loc.name }}</td>
                                 <td v-for="date in weekDates" :key="date" class="col-day p-0.5 text-center">
                                     <div :class="getCoverageClass(loc.id, date)" class="inline-block px-2 py-0.5 rounded font-bold border">{{ getShopCount(loc.id, date) }}</div>
                                 </td>
@@ -110,12 +116,15 @@
 
                 <div class="flex-1 min-h-0">
                     <table class="w-full border-collapse bg-white">
-                        <thead class="sticky top-0 z-10 bg-gray-100 shadow-sm">
-                            <tr><th class="col-name p-2 text-left text-gray-600 font-bold border-r bg-gray-100">Employee</th><th v-for="date in weekDates" :key="date" class="col-day p-1 text-center border-r bg-gray-100"><div class="font-bold text-gray-800">{{ getDayName(date) }}</div><div class="text-[10px] text-gray-500">{{ formatDateShort(date) }}</div></th><th class="col-total p-1 text-center text-gray-600 font-bold bg-gray-100">Total</th></tr>
+                        <thead class="sticky top-0 z-30 bg-gray-100 shadow-sm">
+                            <tr>
+                                <th class="col-name p-2 text-left text-gray-600 font-bold border-r bg-gray-100 sticky left-0 z-40 shadow-sm">Employee</th>
+                                <th v-for="date in weekDates" :key="date" class="col-day p-1 text-center border-r bg-gray-100"><div class="font-bold text-gray-800">{{ getDayName(date) }}</div><div class="text-[10px] text-gray-500">{{ formatDateShort(date) }}</div></th><th class="col-total p-1 text-center text-gray-600 font-bold bg-gray-100">Total</th>
+                            </tr>
                         </thead>
                         <tbody>
                             <tr v-for="emp in employees" :key="emp.id" class="emp-row bg-white hover:bg-gray-50 transition-colors">
-                                <td class="col-name px-2 py-0.5 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b">
+                                <td class="col-name px-2 py-0.5 border-r font-bold text-gray-700 bg-white sticky left-0 shadow-sm border-b z-20">
                                     <div class="flex items-center">
                                         <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[10px] mr-2 shrink-0">{{ getInitials(emp.name) }}</div>
                                         <span class="truncate">{{ emp.name }}</span>
