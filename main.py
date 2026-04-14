@@ -83,12 +83,15 @@ def export_data_sql():
     sql_lines.append("SET FOREIGN_KEY_CHECKS=0;\n\n")
 
     with Session(engine) as session:
-        for table_name, model in TABLE_MAP.items():
+        for dict_key, model in TABLE_MAP.items():
+            # FIX: Get the actual database table name (singular), not the dictionary key
+            db_table_name = model.__tablename__
+            
             results = session.exec(select(model)).all()
             if not results:
                 continue
             
-            sql_lines.append(f"TRUNCATE TABLE `{table_name}`;\n")
+            sql_lines.append(f"TRUNCATE TABLE `{db_table_name}`;\n")
 
             for row in results:
                 data = row.dict()
@@ -107,7 +110,7 @@ def export_data_sql():
                         values.append(f"'{safe_str}'")
                         
                 vals_str = ", ".join(values)
-                sql_lines.append(f"INSERT INTO `{table_name}` ({columns}) VALUES ({vals_str});\n")
+                sql_lines.append(f"INSERT INTO `{db_table_name}` ({columns}) VALUES ({vals_str});\n")
             
             sql_lines.append("\n")
 
@@ -118,7 +121,6 @@ def export_data_sql():
         media_type="application/sql", 
         headers={"Content-Disposition": "attachment; filename=scheduler_migration.sql"}
     )
-
 # --- Standard Routes ---
 
 @app.get("/api/roster/{start_date_str}")
